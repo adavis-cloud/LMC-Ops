@@ -56,6 +56,54 @@ function guessSection(text: string): string {
   return "";
 }
 
+const FREE_EMAIL = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "hotmail.com",
+  "outlook.com", "live.com", "msn.com", "icloud.com", "me.com", "aol.com",
+]);
+
+/** "aochoa@ayayouth.org" -> "Ayayouth" (rough org label); "" for personal mail. */
+function orgFromDomain(email: string): string {
+  const domain = email.split("@")[1]?.toLowerCase();
+  if (!domain || FREE_EMAIL.has(domain)) return "";
+  const root = domain.split(".").slice(-2)[0] ?? "";
+  return root ? root.charAt(0).toUpperCase() + root.slice(1) : "";
+}
+
+function field(body: string, label: RegExp): string {
+  return (body.match(label)?.[1] ?? "").trim();
+}
+
+function shortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return m && d ? `${+m}/${+d}` : iso;
+}
+
+/**
+ * Build a task name in Last Mile's style: {customer} ({DELIVERY/PICKUP} @ time)
+ * or {customer} {m/d}. Customer = the person's name, else the org from domain.
+ */
+function buildTaskName(
+  message: { body: string },
+  sender: { name: string; email: string },
+  dueOn: string | null,
+): string {
+  const who =
+    sender.name?.trim() ||
+    orgFromDomain(sender.email) ||
+    sender.email?.split("@")[0] ||
+    "New inquiry";
+
+  const delivery = field(message.body, /Pick ?up or Delivery\s*[:\n]+\s*([A-Za-z ]+)/i);
+  const time = field(message.body, /\bTime\s*[:\n]+\s*([^\n]+)/i);
+
+  let descriptor = "";
+  if (delivery && time) descriptor = `(${delivery.toUpperCase()} @ ${time})`;
+  else if (delivery) descriptor = `(${delivery.toUpperCase()})`;
+  else if (dueOn) descriptor = shortDate(dueOn);
+
+  return descriptor ? `${who} ${descriptor}` : who;
+}
+
 function parseEventDate(body: string): string | null {
   const m = body.match(/(?:Event Date|Date(?: needed)?)\s*[:\n]+\s*(.+)/i);
   if (!m) return null;
@@ -81,9 +129,9 @@ export function buildTaskDraft(
   sender: { name: string; email: string },
 ): TaskDraft {
   const isSquare = /New Form Entry/i.test(message.subject);
-  const name = sender.name?.trim() || sender.email || "New inquiry";
   const section = guessSection(`${message.subject}\n${message.body}`);
   const dueOn = isSquare ? parseEventDate(message.body) : null;
+  const name = buildTaskName(message, sender, dueOn);
 
   return { name, section, dueOn, notes: buildNotes(message) };
 }
