@@ -46,3 +46,4 @@ next-env.d.ts
 
 # local setup notes (contains no secrets, but not needed in the repo)
 SETUP-GOOGLE-OAUTH.md
+DEPLOY.md
