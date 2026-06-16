@@ -14,28 +14,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const { customerKey, taskGid, section, verdict } = await req
-    .json()
-    .catch(() => ({}));
+  const { keys, taskGid, section, verdict } = await req.json().catch(() => ({}));
 
   if (
-    !customerKey ||
-    typeof customerKey !== "string" ||
+    !Array.isArray(keys) ||
+    keys.length === 0 ||
+    keys.some((k) => typeof k !== "string") ||
     !taskGid ||
     typeof taskGid !== "string" ||
     (verdict !== "confirm" && verdict !== "reject")
   ) {
     return NextResponse.json(
-      { error: "customerKey, taskGid and verdict ('confirm'|'reject') are required" },
+      { error: "keys[], taskGid and verdict ('confirm'|'reject') are required" },
       { status: 400 },
     );
   }
 
   try {
     if (verdict === "reject") {
-      await recordReject(customerKey, taskGid);
+      await recordReject(keys, taskGid);
     } else {
-      await recordConfirm(customerKey, taskGid, typeof section === "string" ? section : undefined);
+      await recordConfirm(keys, taskGid, typeof section === "string" ? section : undefined);
     }
     // `learned` tells the UI whether the correction actually persisted.
     return NextResponse.json({ ok: true, learned: kvConfigured() });

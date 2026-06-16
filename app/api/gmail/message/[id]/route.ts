@@ -9,7 +9,7 @@ import {
 } from "@/lib/asana";
 import { getValidAccessToken } from "@/lib/asana-session";
 import { matchTasks, EmailFields } from "@/lib/match";
-import { customerKeyFor, loadMatchMemory } from "@/lib/match-memory";
+import { learningKeysFor, loadMatchMemory } from "@/lib/match-memory";
 import { buildTaskDraft } from "@/lib/draft";
 import { parseInquiry } from "@/lib/parse";
 
@@ -53,9 +53,15 @@ export async function GET(
           }
         }
       }
-      // Apply anything we've learned for this customer from past corrections.
-      const customerKey = customerKeyFor(parsed.email, session.user?.email);
-      const memory = await loadMatchMemory(customerKey);
+      // Apply anything we've learned for this customer / org from past
+      // corrections, across exact-email, domain, and org-name keys.
+      const learnKeys = learningKeysFor({
+        senderEmail: parsed.email,
+        selfEmail: session.user?.email,
+        subject: parsed.subject,
+        body: message.body,
+      });
+      const memory = await loadMatchMemory(learnKeys);
 
       const fields: EmailFields = {
         subject: parsed.subject,
@@ -67,10 +73,10 @@ export async function GET(
         emailDate: message.date,
         memory,
       };
-      // customerKey is echoed back so the UI can attribute feedback correctly.
+      // learnKeys is echoed back so feedback writes to the same keys we read.
       asana = {
         connected: true as const,
-        customerKey,
+        learnKeys,
         ...matchTasks(fields, candidates),
       };
     }

@@ -155,6 +155,29 @@ function staleDays(emailDate: string | undefined, task: AsanaTask): number | nul
   return (e - t) / 86_400_000;
 }
 
+/** True for personal-email providers, whose domain says nothing about an org. */
+export function isFreeEmailDomain(domain: string): boolean {
+  return FREE_EMAIL.has(domain.toLowerCase());
+}
+
+/**
+ * The distinctive multi-word phrases in an email (e.g. "treetops collective"),
+ * reused as generalization keys for learning: a correction stored under a
+ * phrase applies to any future email mentioning that org name. Capped at 3.
+ */
+export function orgPhraseKeys(subject: string, body: string): string[] {
+  const hay = `${stripReply(subject)}\n${stripQuoted(body)}`;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of phrases(hay)) {
+    if (PHRASE_STOPLIST.has(p) || seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 /** "aochoa@ayayouth.org" -> "ayayouth" (org name); "" for personal providers. */
 function orgRoot(senderEmail: string): string {
   const domain = senderEmail.split("@")[1]?.toLowerCase();

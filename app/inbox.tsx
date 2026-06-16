@@ -33,8 +33,8 @@ interface AsanaMatch {
   match?: TaskRef;
   reasons?: string[];
   alternates?: TaskRef[];
-  /** Customer key the match is attributed to (null for internal senders). */
-  customerKey?: string | null;
+  /** Generalization keys the match is attributed to (email/domain/org-name). */
+  learnKeys?: string[];
 }
 interface TaskDraft {
   name: string;
@@ -259,16 +259,16 @@ export default function Inbox() {
     );
   }
 
-  /** Send a correction so matching improves for this customer next time. */
+  /** Send a correction so matching improves for this customer / org next time. */
   async function sendFeedback(verdict: "confirm" | "reject") {
     const m = detail?.asana;
-    if (!m?.match || !m.customerKey) return;
+    if (!m?.match || !m.learnKeys?.length) return;
     try {
       await fetch("/api/asana/match-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerKey: m.customerKey,
+          keys: m.learnKeys,
           taskGid: m.match.gid,
           section: m.match.section,
           verdict,
@@ -281,8 +281,8 @@ export default function Inbox() {
 
   function confirmMatch() {
     setFeedbackMsg(
-      detail?.asana.customerKey
-        ? "Got it — I'll prefer this task for future emails from this customer."
+      detail?.asana.learnKeys?.length
+        ? "Got it — I'll prefer this task for future emails from this customer and org."
         : "Thanks!",
     );
     void sendFeedback("confirm");
@@ -291,8 +291,8 @@ export default function Inbox() {
   // "Not the right task" — remember the miss, then open a fresh task to create.
   function rejectMatchAndCreate() {
     setFeedbackMsg(
-      detail?.asana.customerKey
-        ? "Noted — I won't suggest that task for this customer again. Creating a new one…"
+      detail?.asana.learnKeys?.length
+        ? "Noted — I won't suggest that task for this customer or org again. Creating a new one…"
         : "Creating a new task…",
     );
     void sendFeedback("reject");
