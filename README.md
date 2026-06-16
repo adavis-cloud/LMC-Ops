@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Last Mile Connector
 
-## Getting Started
+**Live:** https://lmc-ops-tawny.vercel.app
 
-First, run the development server:
+An internal operations dashboard for Last Mile Cafe — sign in with Google,
+triage inbound inquiries, and connect them to your Asana workflow.
+
+## What it does
+
+- **Google sign-in**, locked to the `lastmile.cafe` domain (fails closed).
+- **Inbox triage** with one-click filters — **Catering · Wholesale · Square
+  forms · Bills · Urgent** (Urgent is scored and ranked with "why" tags), plus
+  free-text **Search** and **Show all**.
+- **Open any email** to read the full body, then:
+  - **Asana match check** — finds a corresponding task (by customer email, org
+    domain, or name in the notes) with **confidence**, the task's **section**,
+    and a **Done** badge.
+  - **Actions** — mark as read, flag, a review-only reply draft, and a
+    note-to-self (recipient hard-locked to you).
+  - **Create an Asana task** — pre-filled name, guessed section, due date, and
+    matching notes; duplicate-guarded; nothing creates until you confirm.
+- **Asana panel** — your **My tasks** and the **Outgoing Activity** project.
+- **Slack panel** — see below.
+
+## Slack → Asana
+
+Turn Slack messages into Asana tasks/comments without leaving Slack, and review
+what was done back in the web app.
+
+- On any Slack message: **⋯ More actions → Create Asana task** opens a modal
+  pre-filled with a task name, an **assignee** (guessed from who you @mention or
+  the message's author, via a Slack→Asana roster you set up), and a **due date**
+  parsed from phrases like "tonight" or "by Friday". Confirm and it's created in
+  *Outgoing Activity*, assigned, with the due date driving Asana's reminder.
+- **⋯ → Add comment to Asana task** logs a note on an existing task.
+- `/task order more bags by friday` starts a task from scratch.
+- The **Slack panel** in the web app shows connection status, the roster editor,
+  and a **Recent Slack actions** feed.
+
+The bot only sees a message's text when you invoke a shortcut on it — it does
+not read your channels, and normal Slack replies are untouched.
+
+**Setup:** see [SLACK-SETUP.md](SLACK-SETUP.md) (an Upstash/Vercel KV store plus
+a Slack app with two message shortcuts).
+
+## Stack & ops
+
+Next.js 16 + React 19 + Tailwind v4, Auth.js v5 (Google), Gmail + Asana + Slack
+via REST, Upstash Redis (KV) for Slack automation state. Deployed on **Vercel**,
+Git-connected — every push to `main` auto-deploys.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env.example` to `.env.local` and fill in the values. See `SETUP-GOOGLE-OAUTH.md`,
+`ASANA-SETUP.md`, and `SLACK-SETUP.md` for the per-integration steps.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000).

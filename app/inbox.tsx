@@ -10,7 +10,15 @@ interface GmailMessage {
   date: string;
   snippet: string;
   reasons?: string[];
+  labelIds?: string[];
 }
+
+type ReadFilter = "all" | "unread" | "read";
+type Source =
+  | { kind: "filter"; value: string }
+  | { kind: "search"; value: string }
+  | { kind: "all" }
+  | null;
 
 interface TaskRef {
   gid: string;
@@ -60,6 +68,8 @@ export default function Inbox() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [source, setSource] = useState<Source>(null);
 
   // Detail view
   const [openId, setOpenId] = useState<string | null>(null);
@@ -106,26 +116,43 @@ export default function Inbox() {
     }
   }
 
+  function urlFor(src: NonNullable<Source>, read: ReadFilter): string {
+    const p = new URLSearchParams();
+    if (src.kind === "filter") p.set("filter", src.value);
+    else if (src.kind === "all") p.set("all", "1");
+    else if (src.kind === "search" && src.value.trim()) p.set("q", src.value.trim());
+    if (read !== "all") p.set("read", read);
+    return `/api/gmail/search?${p.toString()}`;
+  }
+
   function runSearch(e?: React.FormEvent) {
     e?.preventDefault();
     setActive(null);
-    load(
-      query.trim()
-        ? `/api/gmail/search?q=${encodeURIComponent(query.trim())}`
-        : "/api/gmail/search",
-    );
+    const src: Source = { kind: "search", value: query };
+    setSource(src);
+    load(urlFor(src, readFilter));
   }
 
   function showAll() {
     setQuery("");
     setActive(null);
-    load("/api/gmail/search?all=1");
+    const src: Source = { kind: "all" };
+    setSource(src);
+    load(urlFor(src, readFilter));
   }
 
   function runFilter(key: string) {
     setQuery("");
     setActive(key);
-    load(`/api/gmail/search?filter=${key}`);
+    const src: Source = { kind: "filter", value: key };
+    setSource(src);
+    load(urlFor(src, readFilter));
+  }
+
+  /** Change the read/unread status filter and re-run the current view. */
+  function applyRead(read: ReadFilter) {
+    setReadFilter(read);
+    if (source) load(urlFor(source, read));
   }
 
   async function openMessage(id: string) {
@@ -643,6 +670,27 @@ export default function Inbox() {
         </button>
       </form>
 
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+          Status
+        </span>
+        {(["all", "unread", "read"] as const).map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => applyRead(r)}
+            disabled={loading}
+            className={`rounded-full border px-3 py-1 text-xs font-medium capitalize transition disabled:opacity-50 ${
+              readFilter === r
+                ? "border-brand bg-brand text-cream"
+                : "border-line bg-surface text-ink hover:bg-cream"
+            }`}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -670,8 +718,20 @@ export default function Inbox() {
               className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-left transition hover:border-accent/60 hover:shadow-sm"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <span className="truncate text-sm font-semibold text-ink">
-                  {m.subject || "(no subject)"}
+                <span
+                  className={`flex min-w-0 items-center gap-2 truncate text-sm ${
+                    m.labelIds?.includes("UNREAD")
+                      ? "font-bold text-ink"
+                      : "font-medium text-ink/70"
+                  }`}
+                >
+                  {m.labelIds?.includes("UNREAD") && (
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                      aria-label="unread"
+                    />
+                  )}
+                  <span className="truncate">{m.subject || "(no subject)"}</span>
                 </span>
                 <span className="shrink-0 text-xs text-muted">
                   {formatDate(m.date)}
