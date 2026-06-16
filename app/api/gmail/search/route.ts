@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const q = req.nextUrl.searchParams.get("q")?.trim() || DEFAULT_QUERY;
+  // `all=1` ignores the filter and returns the latest inbox messages.
+  const showAll = req.nextUrl.searchParams.get("all");
+  const typed = req.nextUrl.searchParams.get("q")?.trim();
+  const q = showAll ? "in:inbox" : typed || DEFAULT_QUERY;
 
   try {
     const messages = await searchMessages(session.accessToken, q, 25);

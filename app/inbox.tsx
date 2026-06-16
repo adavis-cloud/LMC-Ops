@@ -17,14 +17,10 @@ export default function Inbox() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function runSearch(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function load(url: string) {
     setLoading(true);
     setError(null);
     try {
-      const url = query.trim()
-        ? `/api/gmail/search?q=${encodeURIComponent(query.trim())}`
-        : "/api/gmail/search";
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed");
@@ -35,6 +31,19 @@ export default function Inbox() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function runSearch(e?: React.FormEvent) {
+    e?.preventDefault();
+    const url = query.trim()
+      ? `/api/gmail/search?q=${encodeURIComponent(query.trim())}`
+      : "/api/gmail/search";
+    load(url);
+  }
+
+  function showAll() {
+    setQuery("");
+    load("/api/gmail/search?all=1");
   }
 
   return (
@@ -67,6 +76,14 @@ export default function Inbox() {
           className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-cream transition hover:bg-brand-hover disabled:opacity-50"
         >
           {loading ? "Searching…" : "Search"}
+        </button>
+        <button
+          type="button"
+          onClick={showAll}
+          disabled={loading}
+          className="rounded-full border border-line px-5 py-2.5 text-sm font-medium text-ink transition hover:bg-cream disabled:opacity-50"
+        >
+          Show all
         </button>
       </form>
 
