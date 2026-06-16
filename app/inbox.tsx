@@ -16,6 +16,7 @@ interface TaskRef {
   gid: string;
   name: string;
   url: string;
+  completed: boolean;
 }
 interface AsanaMatch {
   connected: boolean;
@@ -331,14 +332,21 @@ function AsanaMatchBlock({ asana }: { asana: AsanaMatch }) {
       <p className={`text-xs font-semibold uppercase tracking-wide ${s.tag}`}>
         {s.label}
       </p>
-      <a
-        href={asana.match.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1 block text-sm font-medium text-ink hover:underline"
-      >
-        {asana.match.name}
-      </a>
+      <div className="mt-1 flex items-center gap-2">
+        <a
+          href={asana.match.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-ink hover:underline"
+        >
+          {asana.match.name}
+        </a>
+        {asana.match.completed && (
+          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+            Done
+          </span>
+        )}
+      </div>
       {asana.alternates && asana.alternates.length > 0 && (
         <div className="mt-2 border-t border-line/70 pt-2">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted">

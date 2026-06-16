@@ -57,8 +57,10 @@ export async function GET(
       // Candidate pool from tasks we can already read (no extra Asana scope):
       // the user's assigned tasks + the pinned "Outgoing Activity" project.
       const pools = await Promise.allSettled([
-        getMyTasks(asanaToken),
-        getProjectTasksByName(asanaToken, PINNED_PROJECT_NAME),
+        getMyTasks(asanaToken, { includeCompleted: true }),
+        getProjectTasksByName(asanaToken, PINNED_PROJECT_NAME, {
+          includeCompleted: true,
+        }),
       ]);
       const seen = new Set<string>();
       const candidates: AsanaTask[] = [];

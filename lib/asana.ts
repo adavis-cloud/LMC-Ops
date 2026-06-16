@@ -20,6 +20,7 @@ export interface AsanaTask {
   dueOn: string | null;
   url: string;
   projects: string[];
+  completed: boolean;
 }
 
 /**
@@ -115,7 +116,7 @@ export async function getWorkspaceId(accessToken: string): Promise<string> {
   return ws.gid;
 }
 
-const TASK_FIELDS = "name,due_on,permalink_url,projects.name";
+const TASK_FIELDS = "name,due_on,permalink_url,projects.name,completed";
 
 interface RawTask {
   gid: string;
@@ -123,6 +124,7 @@ interface RawTask {
   due_on: string | null;
   permalink_url: string;
   projects?: { name: string }[];
+  completed?: boolean;
 }
 
 function toTask(t: RawTask): AsanaTask {
@@ -132,22 +134,28 @@ function toTask(t: RawTask): AsanaTask {
     dueOn: t.due_on ?? null,
     url: t.permalink_url,
     projects: (t.projects ?? []).map((p) => p.name),
+    completed: t.completed ?? false,
   };
 }
 
-/** Incomplete tasks assigned to the current user. */
+/**
+ * Tasks assigned to the current user. Incomplete only by default; pass
+ * includeCompleted to also pull finished tasks (used for email matching).
+ */
 export async function getMyTasks(
   accessToken: string,
-  opts: { dueOnly?: boolean } = {},
+  opts: { dueOnly?: boolean; includeCompleted?: boolean } = {},
 ): Promise<AsanaTask[]> {
   const workspace = await getWorkspaceId(accessToken);
-  const data: RawTask[] = await apiGet(accessToken, "/tasks", {
+  const params: Record<string, string> = {
     assignee: "me",
     workspace,
-    completed_since: "now", // returns only incomplete tasks
     opt_fields: TASK_FIELDS,
     limit: "100",
-  });
+  };
+  if (!opts.includeCompleted) params.completed_since = "now";
+
+  const data: RawTask[] = await apiGet(accessToken, "/tasks", params);
   let tasks = data.map(toTask);
   if (opts.dueOnly) {
     tasks = tasks
@@ -157,30 +165,38 @@ export async function getMyTasks(
   return tasks;
 }
 
-/** Incomplete tasks in a specific project. */
+/** Tasks in a specific project. Incomplete only unless includeCompleted. */
 export async function getProjectTasks(
   accessToken: string,
   projectId: string,
+  opts: { includeCompleted?: boolean } = {},
 ): Promise<AsanaTask[]> {
+  const params: Record<string, string> = {
+    opt_fields: TASK_FIELDS,
+    limit: "100",
+  };
+  if (!opts.includeCompleted) params.completed_since = "now";
+
   const data: RawTask[] = await apiGet(
     accessToken,
     `/projects/${projectId}/tasks`,
-    { completed_since: "now", opt_fields: TASK_FIELDS, limit: "100" },
+    params,
   );
   return data.map(toTask);
 }
 
-/** Incomplete tasks in the project matching this name (case-insensitive). */
+/** Tasks in the project matching this name (case-insensitive). */
 export async function getProjectTasksByName(
   accessToken: string,
   name: string,
+  opts: { includeCompleted?: boolean } = {},
 ): Promise<AsanaTask[]> {
   const projects = await listProjects(accessToken);
   const match = projects.find(
     (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
   if (!match) throw new Error(`No Asana project named "${name}" found.`);
-  return getProjectTasks(accessToken, match.gid);
+  return getProjectTasks(accessToken, match.gid, opts);
 }
 
 /** The project pinned in the UI and used as a match candidate pool. */

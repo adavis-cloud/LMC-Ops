@@ -12,6 +12,7 @@ export interface TaskRef {
   gid: string;
   name: string;
   url: string;
+  completed: boolean;
 }
 
 export interface MatchResult {
@@ -54,7 +55,7 @@ function scoreTask(email: EmailFields, task: AsanaTask): number {
 }
 
 function toRef(t: AsanaTask): TaskRef {
-  return { gid: t.gid, name: t.name, url: t.url };
+  return { gid: t.gid, name: t.name, url: t.url, completed: t.completed };
 }
 
 /** Rank candidate tasks against an email and bucket the best into a confidence. */
