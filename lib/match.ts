@@ -62,7 +62,10 @@ function scoreTask(email: EmailFields, task: AsanaTask): number {
   if (senderName.length > 2 && hay.includes(senderName)) score += 1;
 
   const org = orgRoot(senderEmail);
-  if (org && hay.includes(org)) score += 1; // e.g. "corewell", "ayayouth"
+  // Compare against a space/punctuation-stripped haystack too, so a domain like
+  // "thestopoverexperience" matches the notes text "The Stopover Experience".
+  const compact = hay.replace(/[^a-z0-9]/g, "");
+  if (org && (hay.includes(org) || compact.includes(org))) score += 1;
 
   // Subject keyword overlap (minor; subjects are often generic).
   const subjTokens = new Set(tokens(email.subject));

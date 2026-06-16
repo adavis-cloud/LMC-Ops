@@ -10,8 +10,8 @@ import {
 import { getValidAccessToken } from "@/lib/asana-session";
 import { matchTasks, EmailFields } from "@/lib/match";
 
-/** "Jane <jane@x.com> via orders <...>" -> { name, email } for the customer. */
-function parseSender(from: string, subject: string) {
+/** Resolve the customer's { name, email } from the headers / Square form. */
+function parseSender(from: string, subject: string, body: string) {
   const emailMatch = from.match(/<([^>]+@[^>]+)>/);
   let email = emailMatch?.[1] ?? "";
   if (!email) {
@@ -23,12 +23,15 @@ function parseSender(from: string, subject: string) {
     .replace(/\s+via\s+\S+.*$/i, "")
     .trim();
 
-  // Square form notifications carry the real customer in the subject:
-  //   "New Form Entry from danny@x.com: Contact us"
-  const square = subject.match(/New Form Entry from\s+([^:]+):/i);
-  if (square) {
-    email = square[1].trim();
-    name = "";
+  // Square form notifications: the real customer is in the subject + body.
+  //   subject: "New Form Entry from danny@x.com: Contact us"
+  //   body:    "Full name\nDanny McGee\nEmail\ndanny@x.com\n..."
+  if (/New Form Entry from/i.test(subject)) {
+    const bodyName = body.match(/Full name\s*[:\n]+\s*(.+)/i);
+    const bodyEmail = body.match(/Email\s*[:\n]+\s*([\w.+-]+@[\w.-]+\.\w+)/i);
+    const subjEmail = subject.match(/New Form Entry from\s+([\w.+-]+@[\w.-]+\.\w+)/i);
+    name = bodyName?.[1]?.trim() ?? "";
+    email = (bodyEmail?.[1] ?? subjEmail?.[1] ?? email).trim();
   }
   return { name, email };
 }
@@ -46,7 +49,11 @@ export async function GET(
 
   try {
     const message = await getMessage(session.accessToken, id);
-    const { name, email } = parseSender(message.from, message.subject);
+    const { name, email } = parseSender(
+      message.from,
+      message.subject,
+      message.body,
+    );
 
     // Check Asana for a corresponding task (only if connected).
     const asanaToken = await getValidAccessToken();
