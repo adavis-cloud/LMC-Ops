@@ -16,6 +16,8 @@ export interface EmailFields {
   /** The email's Date header — used to down-rank stale tasks (a 2025 order is
    *  not the live match for a 2026 email). */
   emailDate?: string;
+  /** What we've learned from past corrections for this customer (see MatchMemory). */
+  memory?: MatchMemory;
 }
 
 export interface TaskRef {
@@ -24,6 +26,19 @@ export interface TaskRef {
   url: string;
   completed: boolean;
   section: string;
+}
+
+/**
+ * What the app has learned from the user's past corrections for one customer.
+ * Persisted in KV (see lib/match-memory.ts); absent when KV isn't configured.
+ */
+export interface MatchMemory {
+  /** Tasks the user explicitly confirmed — strongly boosted. */
+  confirmedGids: string[];
+  /** Tasks the user said were wrong — excluded from results. */
+  rejectedGids: string[];
+  /** The section this customer's tasks usually live in. */
+  preferredSection?: string;
 }
 
 export interface MatchResult {
@@ -162,6 +177,17 @@ function scoreTask(email: EmailFields, task: AsanaTask): Scored {
   const reasons: string[] = [];
   let score = 0;
 
+  // Learned corrections take priority over every heuristic below.
+  const mem = email.memory;
+  if (mem?.rejectedGids.includes(task.gid)) {
+    // The user told us this task is wrong for this customer — never suggest it.
+    return { score: -100, reasons: [] };
+  }
+  if (mem?.confirmedGids.includes(task.gid)) {
+    score += 5; // a past confirmation outweighs any content signal
+    reasons.push("you confirmed this before");
+  }
+
   // Is this email from us / a teammate rather than an outside customer? If so,
   // the SENDER describes our side, not the customer — so the sender's name,
   // email, and (own) domain are useless signals and we lean on the subject and
@@ -229,6 +255,17 @@ function scoreTask(email: EmailFields, task: AsanaTask): Scored {
   if (subjTokens.size && nameTokens.length) {
     const shared = nameTokens.filter((t) => subjTokens.has(t)).length;
     score += Math.min(0.5, (shared / subjTokens.size) * 0.5);
+  }
+
+  // This customer's tasks usually live in one section (learned from past
+  // confirmations) — a gentle nudge toward the right bucket.
+  if (
+    mem?.preferredSection &&
+    task.section &&
+    task.section.toLowerCase() === mem.preferredSection.toLowerCase()
+  ) {
+    score += 0.5;
+    reasons.push("usual section for this customer");
   }
 
   // A finished task is probably already-handled history, not the live match for

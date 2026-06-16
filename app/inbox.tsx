@@ -33,6 +33,8 @@ interface AsanaMatch {
   match?: TaskRef;
   reasons?: string[];
   alternates?: TaskRef[];
+  /** Customer key the match is attributed to (null for internal senders). */
+  customerKey?: string | null;
 }
 interface TaskDraft {
   name: string;
@@ -99,6 +101,8 @@ export default function Inbox() {
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [commentBusy, setCommentBusy] = useState(false);
   const [commentMsg, setCommentMsg] = useState<string | null>(null);
+  // Match-correction feedback ("Correct" / "Not the right task").
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -168,6 +172,7 @@ export default function Inbox() {
     setCreatedUrl(null);
     setCreateMsg(null);
     setCommentMsg(null);
+    setFeedbackMsg(null);
     try {
       const res = await fetch(`/api/gmail/message/${id}`);
       const data = await res.json();
@@ -252,6 +257,46 @@ export default function Inbox() {
     setDraft(
       `Hi ${first},\n\nThanks for reaching out!\n\n\n\nBest,\nLast Mile Cafe\n\n----- Original message -----\n${quoted}`,
     );
+  }
+
+  /** Send a correction so matching improves for this customer next time. */
+  async function sendFeedback(verdict: "confirm" | "reject") {
+    const m = detail?.asana;
+    if (!m?.match || !m.customerKey) return;
+    try {
+      await fetch("/api/asana/match-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerKey: m.customerKey,
+          taskGid: m.match.gid,
+          section: m.match.section,
+          verdict,
+        }),
+      });
+    } catch {
+      /* best-effort — never block the user on a learning write */
+    }
+  }
+
+  function confirmMatch() {
+    setFeedbackMsg(
+      detail?.asana.customerKey
+        ? "Got it — I'll prefer this task for future emails from this customer."
+        : "Thanks!",
+    );
+    void sendFeedback("confirm");
+  }
+
+  // "Not the right task" — remember the miss, then open a fresh task to create.
+  function rejectMatchAndCreate() {
+    setFeedbackMsg(
+      detail?.asana.customerKey
+        ? "Noted — I won't suggest that task for this customer again. Creating a new one…"
+        : "Creating a new task…",
+    );
+    void sendFeedback("reject");
+    void openCreate();
   }
 
   async function openCreate() {
@@ -356,6 +401,27 @@ export default function Inbox() {
             </div>
 
             <AsanaMatchBlock asana={detail.asana} />
+
+            {detail.asana.connected && detail.asana.match && (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <span className="text-xs text-muted">Is this the right task?</span>
+                <button
+                  type="button"
+                  onClick={confirmMatch}
+                  className="rounded-full border border-green-300 bg-green-50 px-3 py-1 text-xs font-medium text-green-700 transition hover:bg-green-100"
+                >
+                  ✓ Correct
+                </button>
+                <button
+                  type="button"
+                  onClick={rejectMatchAndCreate}
+                  className="rounded-full border border-line px-3 py-1 text-xs font-medium text-ink transition hover:bg-cream"
+                >
+                  ✗ Not the right task — create new
+                </button>
+                {feedbackMsg && <span className="text-xs text-muted">{feedbackMsg}</span>}
+              </div>
+            )}
 
             <div className="rounded-xl border border-line bg-surface p-5">
               <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink/80">
