@@ -45,10 +45,12 @@ export default function Asana({
   }
 
   return (
-    <section className="mt-10 flex flex-col gap-5 border-t border-line pt-8">
+    <section className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight text-ink">Asana</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">
+            Asana tasks
+          </h2>
           <p className="mt-1 text-sm text-muted">
             {connected
               ? "Pull your tasks from Asana."

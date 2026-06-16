@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   store.delete("asana_oauth_state");
 
   const home = (params = "") =>
-    NextResponse.redirect(new URL(`/${params}`, url.origin));
+    NextResponse.redirect(new URL(`/asana${params}`, url.origin));
 
   if (url.searchParams.get("error")) return home("?asana=denied");
   if (!code || !state || state !== expectedState) return home("?asana=error");

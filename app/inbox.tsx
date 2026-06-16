@@ -23,6 +23,7 @@ interface AsanaMatch {
   connected: boolean;
   confidence?: "high" | "medium" | "low" | "none";
   match?: TaskRef;
+  reasons?: string[];
   alternates?: TaskRef[];
 }
 interface TaskDraft {
@@ -752,6 +753,21 @@ function AsanaMatchBlock({ asana }: { asana: AsanaMatch }) {
           </span>
         )}
       </div>
+      {asana.reasons && asana.reasons.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
+            Matched on
+          </span>
+          {asana.reasons.map((r) => (
+            <span
+              key={r}
+              className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-brand"
+            >
+              {r}
+            </span>
+          ))}
+        </div>
+      )}
       {asana.alternates && asana.alternates.length > 0 && (
         <div className="mt-2 border-t border-line/70 pt-2">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted">

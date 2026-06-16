@@ -57,6 +57,7 @@ export async function GET(
         senderName: parsed.contactName,
         senderEmail: parsed.email,
         business: parsed.business,
+        body: message.body,
       };
       asana = { connected: true as const, ...matchTasks(fields, candidates) };
     }

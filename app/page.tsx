@@ -1,7 +1,5 @@
 import { auth, signIn, signOut } from "@/auth";
 import Inbox from "@/app/inbox";
-import Asana from "@/app/asana";
-import { isAsanaConnected } from "@/lib/asana-session";
 
 function Logo({ className = "" }: { className?: string }) {
   return (
@@ -26,11 +24,7 @@ function Logo({ className = "" }: { className?: string }) {
   );
 }
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ asana?: string }>;
-}) {
+export default async function Home() {
   const session = await auth();
 
   if (!session?.user) {
@@ -79,25 +73,34 @@ export default async function Home({
               <p className="text-xs text-muted">{session.user.email}</p>
             </div>
           </div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut();
-            }}
-          >
-            <button
-              type="submit"
+          <div className="flex items-center gap-2">
+            <a
+              href="/asana"
+              target="_blank"
+              rel="noopener noreferrer"
               className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-cream"
             >
-              Sign out
-            </button>
-          </form>
+              Asana ↗
+            </a>
+            <form
+              action={async () => {
+                "use server";
+                await signOut();
+              }}
+            >
+              <button
+                type="submit"
+                className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-cream"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
         <Inbox />
-        <Asana connected={await isAsanaConnected()} notice={(await searchParams).asana} />
       </div>
     </main>
   );
