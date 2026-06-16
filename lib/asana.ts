@@ -22,6 +22,12 @@ export interface AsanaTask {
   projects: string[];
 }
 
+/**
+ * Read-only granular scopes we request. These must also be enabled on the
+ * Asana app (OAuth → "Specific scopes"). We never write, so reads only.
+ */
+const SCOPES = ["users:read", "projects:read", "tasks:read"].join(" ");
+
 /** Build the URL we send the user to so they can authorize the app. */
 export function authorizeUrl(redirectUri: string, state: string): string {
   const u = new URL(AUTHORIZE);
@@ -29,6 +35,7 @@ export function authorizeUrl(redirectUri: string, state: string): string {
   u.searchParams.set("redirect_uri", redirectUri);
   u.searchParams.set("response_type", "code");
   u.searchParams.set("state", state);
+  u.searchParams.set("scope", SCOPES);
   return u.toString();
 }
 
