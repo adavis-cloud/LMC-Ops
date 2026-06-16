@@ -16,7 +16,6 @@ export default function Inbox() {
   const [messages, setMessages] = useState<GmailMessage[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usedQuery, setUsedQuery] = useState<string>("");
 
   async function runSearch(e?: React.FormEvent) {
     e?.preventDefault();
@@ -30,7 +29,6 @@ export default function Inbox() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed");
       setMessages(data.messages);
-      setUsedQuery(data.query);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
       setMessages(null);
@@ -40,13 +38,18 @@ export default function Inbox() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-5">
       <div>
-        <h2 className="text-lg font-medium">Catering &amp; wholesale inquiries</h2>
-        <p className="text-sm text-gray-500">
-          Searches your inbox. Leave the box empty to use the default
-          catering/wholesale filter, or type a Gmail search (e.g.{" "}
-          <code className="rounded bg-gray-100 px-1">from:square</code>).
+        <h2 className="text-lg font-semibold tracking-tight text-ink">
+          Catering &amp; wholesale inquiries
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Search your inbox. Leave it empty for the default catering/wholesale
+          filter, or type a Gmail search like{" "}
+          <code className="rounded bg-cream px-1.5 py-0.5 text-xs text-ink">
+            from:square
+          </code>
+          .
         </p>
       </div>
 
@@ -55,56 +58,72 @@ export default function Inbox() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Default: catering OR wholesale OR contact form…"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500"
+          placeholder="Search inquiries…"
+          className="flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-brand"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-cream transition hover:bg-brand-hover disabled:opacity-50"
         >
           {loading ? "Searching…" : "Search"}
         </button>
       </form>
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </p>
       )}
 
-      {messages && (
-        <p className="text-xs text-gray-400">
-          {messages.length} result{messages.length === 1 ? "" : "s"} ·{" "}
-          <code>{usedQuery}</code>
+      {messages !== null && (
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">
+          {messages.length} result{messages.length === 1 ? "" : "s"}
         </p>
       )}
 
-      <ul className="flex flex-col divide-y divide-gray-100 rounded-lg border border-gray-200">
+      <ul className="flex flex-col gap-2">
         {messages?.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-gray-400">
+          <li className="rounded-xl border border-line bg-surface px-4 py-10 text-center text-sm text-muted">
             No matching messages.
           </li>
         )}
         {messages?.map((m) => (
-          <li key={m.id} className="flex flex-col gap-1 px-4 py-3">
+          <li
+            key={m.id}
+            className="rounded-xl border border-line bg-surface px-4 py-3 transition hover:border-accent/60 hover:shadow-sm"
+          >
             <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm font-medium">
+              <span className="truncate text-sm font-semibold text-ink">
                 {m.subject || "(no subject)"}
               </span>
-              <span className="shrink-0 text-xs text-gray-400">
+              <span className="shrink-0 text-xs text-muted">
                 {formatDate(m.date)}
               </span>
             </div>
-            <span className="truncate text-xs text-gray-500">{m.from}</span>
-            <span className="line-clamp-2 text-xs text-gray-400">
+            <span className="mt-0.5 block truncate text-xs text-muted">
+              {cleanFrom(m.from)}
+            </span>
+            <span className="mt-1.5 block line-clamp-2 text-sm text-ink/70">
               {m.snippet}
             </span>
           </li>
         ))}
       </ul>
+
+      {messages === null && !error && (
+        <div className="rounded-xl border border-dashed border-line px-4 py-12 text-center text-sm text-muted">
+          Run a search to see catering &amp; wholesale inquiries here.
+        </div>
+      )}
     </section>
   );
+}
+
+/** "Jane Doe <jane@x.com>" -> "Jane Doe" when a display name is present. */
+function cleanFrom(from: string): string {
+  const match = from.match(/^\s*"?([^"<]+?)"?\s*<.+>\s*$/);
+  return match ? match[1].trim() : from;
 }
 
 function formatDate(raw: string): string {
