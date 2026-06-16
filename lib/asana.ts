@@ -293,6 +293,15 @@ export async function createTask(
   return { gid: created.gid, name: created.name, url: created.permalink_url };
 }
 
+/** Add a comment (story) to an existing task. */
+export async function addComment(
+  accessToken: string,
+  taskGid: string,
+  text: string,
+): Promise<void> {
+  await apiPost(accessToken, `/tasks/${taskGid}/stories`, { text });
+}
+
 /** Non-archived projects in the user's workspace (for the picker). */
 export async function listProjects(accessToken: string): Promise<AsanaProject[]> {
   const workspace = await getWorkspaceId(accessToken);

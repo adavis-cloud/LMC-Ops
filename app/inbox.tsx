@@ -84,6 +84,8 @@ export default function Inbox() {
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [commentMsg, setCommentMsg] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -135,6 +137,7 @@ export default function Inbox() {
     setShowCreate(false);
     setCreatedUrl(null);
     setCreateMsg(null);
+    setCommentMsg(null);
     try {
       const res = await fetch(`/api/gmail/message/${id}`);
       const data = await res.json();
@@ -232,6 +235,29 @@ export default function Inbox() {
       } catch {
         /* dropdown falls back to the guessed section */
       }
+    }
+  }
+
+  async function addEmailComment() {
+    if (!detail?.asana.match || !openId) return;
+    setCommentBusy(true);
+    setCommentMsg(null);
+    try {
+      const res = await fetch("/api/asana/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskGid: detail.asana.match.gid,
+          messageId: openId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to add comment");
+      setCommentMsg(`✓ Added to "${detail.asana.match.name}"`);
+    } catch (err) {
+      setCommentMsg(err instanceof Error ? err.message : "Failed to add comment");
+    } finally {
+      setCommentBusy(false);
     }
   }
 
@@ -396,6 +422,31 @@ export default function Inbox() {
                     </button>
                   )}
                 </div>
+
+                {detail.asana.match && (
+                  <div className="flex flex-col gap-1.5 rounded-lg border border-line bg-cream/60 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={addEmailComment}
+                        disabled={commentBusy}
+                        className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-cream transition hover:bg-brand-hover disabled:opacity-50"
+                      >
+                        {commentBusy ? "Adding…" : "Add email to matched task"}
+                      </button>
+                      <span className="text-xs text-muted">
+                        Logs this email as a comment on{" "}
+                        <span className="font-medium text-ink">
+                          {detail.asana.match.name}
+                        </span>
+                        .
+                      </span>
+                    </div>
+                    {commentMsg && (
+                      <p className="text-xs text-muted">{commentMsg}</p>
+                    )}
+                  </div>
+                )}
 
                 {!showCreate &&
                   !createdUrl &&

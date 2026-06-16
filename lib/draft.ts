@@ -64,18 +64,26 @@ function parseEventDate(body: string): string | null {
   return d.toISOString().slice(0, 10);
 }
 
+/** The cleaned email content used for both task notes and task comments. */
+export function buildNotes(message: {
+  subject: string;
+  body: string;
+  from: string;
+}): string {
+  const isSquare = /New Form Entry/i.test(message.subject);
+  return isSquare
+    ? cleanFormNotes(message.body)
+    : `From: ${message.from}\nSubject: ${message.subject}\n\n${trimQuoted(message.body)}`;
+}
+
 export function buildTaskDraft(
   message: { subject: string; body: string; from: string },
   sender: { name: string; email: string },
 ): TaskDraft {
   const isSquare = /New Form Entry/i.test(message.subject);
-  const notes = isSquare
-    ? cleanFormNotes(message.body)
-    : `From: ${message.from}\nSubject: ${message.subject}\n\n${trimQuoted(message.body)}`;
-
   const name = sender.name?.trim() || sender.email || "New inquiry";
   const section = guessSection(`${message.subject}\n${message.body}`);
   const dueOn = isSquare ? parseEventDate(message.body) : null;
 
-  return { name, section, dueOn, notes };
+  return { name, section, dueOn, notes: buildNotes(message) };
 }
