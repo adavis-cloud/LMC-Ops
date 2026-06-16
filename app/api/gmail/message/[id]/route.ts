@@ -10,32 +10,7 @@ import {
 import { getValidAccessToken } from "@/lib/asana-session";
 import { matchTasks, EmailFields } from "@/lib/match";
 import { buildTaskDraft } from "@/lib/draft";
-
-/** Resolve the customer's { name, email } from the headers / Square form. */
-function parseSender(from: string, subject: string, body: string) {
-  const emailMatch = from.match(/<([^>]+@[^>]+)>/);
-  let email = emailMatch?.[1] ?? "";
-  if (!email) {
-    const bare = from.match(/[\w.+-]+@[\w.-]+\.\w+/);
-    email = bare?.[0] ?? "";
-  }
-  let name = (from.split("<")[0] ?? "")
-    .replace(/"/g, "")
-    .replace(/\s+via\s+\S+.*$/i, "")
-    .trim();
-
-  // Square form notifications: the real customer is in the subject + body.
-  //   subject: "New Form Entry from danny@x.com: Contact us"
-  //   body:    "Full name\nDanny McGee\nEmail\ndanny@x.com\n..."
-  if (/New Form Entry from/i.test(subject)) {
-    const bodyName = body.match(/Full name\s*[:\n]+\s*(.+)/i);
-    const bodyEmail = body.match(/Email\s*[:\n]+\s*([\w.+-]+@[\w.-]+\.\w+)/i);
-    const subjEmail = subject.match(/New Form Entry from\s+([\w.+-]+@[\w.-]+\.\w+)/i);
-    name = bodyName?.[1]?.trim() ?? "";
-    email = (bodyEmail?.[1] ?? subjEmail?.[1] ?? email).trim();
-  }
-  return { name, email };
-}
+import { parseInquiry } from "@/lib/parse";
 
 export async function GET(
   req: NextRequest,
@@ -50,11 +25,7 @@ export async function GET(
 
   try {
     const message = await getMessage(session.accessToken, id);
-    const { name, email } = parseSender(
-      message.from,
-      message.subject,
-      message.body,
-    );
+    const parsed = parseInquiry(message);
 
     // Check Asana for a corresponding task (only if connected).
     const asanaToken = await getValidAccessToken();
@@ -81,15 +52,16 @@ export async function GET(
           }
         }
       }
-      const email_: EmailFields = {
-        subject: message.subject,
-        senderName: name,
-        senderEmail: email,
+      const fields: EmailFields = {
+        subject: parsed.subject,
+        senderName: parsed.contactName,
+        senderEmail: parsed.email,
+        business: parsed.business,
       };
-      asana = { connected: true as const, ...matchTasks(email_, candidates) };
+      asana = { connected: true as const, ...matchTasks(fields, candidates) };
     }
 
-    const draftTask = buildTaskDraft(message, { name, email });
+    const draftTask = buildTaskDraft(parsed);
 
     return NextResponse.json({ message, asana, draftTask });
   } catch (err) {

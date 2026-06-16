@@ -6,6 +6,7 @@ export interface EmailFields {
   subject: string;
   senderName: string;
   senderEmail: string;
+  business?: string;
 }
 
 export interface TaskRef {
@@ -67,6 +68,13 @@ function scoreTask(email: EmailFields, task: AsanaTask): number {
   // "thestopoverexperience" matches the notes text "The Stopover Experience".
   const compact = hay.replace(/[^a-z0-9]/g, "");
   if (org && (hay.includes(org) || compact.includes(org))) score += 1;
+
+  // Business name from the form (e.g. "AYA Youth") is a strong signal.
+  const business = email.business?.toLowerCase().trim();
+  if (business && business.length > 2) {
+    const bizCompact = business.replace(/[^a-z0-9]/g, "");
+    if (hay.includes(business) || compact.includes(bizCompact)) score += 1.5;
+  }
 
   // Subject keyword overlap (minor; subjects are often generic).
   const subjTokens = new Set(tokens(email.subject));

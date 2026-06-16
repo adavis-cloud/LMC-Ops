@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { getMessage } from "@/lib/gmail";
 import { addComment } from "@/lib/asana";
 import { getValidAccessToken } from "@/lib/asana-session";
-import { buildNotes } from "@/lib/draft";
+import { parseInquiry } from "@/lib/parse";
 
 /**
  * POST { taskGid, messageId } — add an email's content as a comment on a task.
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   try {
     const message = await getMessage(session.accessToken, messageId);
     const received = message.date ? ` · ${message.date}` : "";
-    const text = `Email logged from Connector — "${message.subject}"${received}\n\n${buildNotes(message)}`;
+    const text = `Email logged from Connector — "${message.subject}"${received}\n\n${parseInquiry(message).notes}`;
     await addComment(asanaToken, taskGid, text);
     return NextResponse.json({ ok: true });
   } catch (err) {
