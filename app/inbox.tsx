@@ -12,6 +12,29 @@ interface GmailMessage {
   reasons?: string[];
 }
 
+interface TaskRef {
+  gid: string;
+  name: string;
+  url: string;
+}
+interface AsanaMatch {
+  connected: boolean;
+  confidence?: "high" | "medium" | "low" | "none";
+  match?: TaskRef;
+  alternates?: TaskRef[];
+}
+interface MessageDetail {
+  message: {
+    id: string;
+    from: string;
+    to: string;
+    subject: string;
+    date: string;
+    body: string;
+  };
+  asana: AsanaMatch;
+}
+
 const FILTERS = [
   { key: "catering", label: "Catering" },
   { key: "wholesale", label: "Wholesale" },
@@ -26,6 +49,12 @@ export default function Inbox() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+
+  // Detail view
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<MessageDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -46,10 +75,11 @@ export default function Inbox() {
   function runSearch(e?: React.FormEvent) {
     e?.preventDefault();
     setActive(null);
-    const url = query.trim()
-      ? `/api/gmail/search?q=${encodeURIComponent(query.trim())}`
-      : "/api/gmail/search";
-    load(url);
+    load(
+      query.trim()
+        ? `/api/gmail/search?q=${encodeURIComponent(query.trim())}`
+        : "/api/gmail/search",
+    );
   }
 
   function showAll() {
@@ -64,6 +94,75 @@ export default function Inbox() {
     load(`/api/gmail/search?filter=${key}`);
   }
 
+  async function openMessage(id: string) {
+    setOpenId(id);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/gmail/message/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't open message");
+      setDetail(data);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Couldn't open message");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeDetail() {
+    setOpenId(null);
+    setDetail(null);
+    setDetailError(null);
+  }
+
+  // ---- Detail view ----
+  if (openId) {
+    return (
+      <section className="flex flex-col gap-4">
+        <button
+          type="button"
+          onClick={closeDetail}
+          className="w-fit text-sm font-medium text-brand hover:underline"
+        >
+          ← Back to results
+        </button>
+
+        {detailLoading && <p className="text-sm text-muted">Loading email…</p>}
+        {detailError && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {detailError}
+          </p>
+        )}
+
+        {detail && (
+          <>
+            <div className="rounded-xl border border-line bg-surface p-5">
+              <h2 className="text-lg font-semibold text-ink">
+                {detail.message.subject || "(no subject)"}
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                <span className="text-ink">{cleanFrom(detail.message.from)}</span>
+                {" · "}
+                {formatDate(detail.message.date)}
+              </p>
+            </div>
+
+            <AsanaMatchBlock asana={detail.asana} />
+
+            <div className="rounded-xl border border-line bg-surface p-5">
+              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink/80">
+                {detail.message.body || "(no message body)"}
+              </pre>
+            </div>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  // ---- List view ----
   return (
     <section className="flex flex-col gap-5">
       <div>
@@ -71,12 +170,11 @@ export default function Inbox() {
           Inbox inquiries
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Filter by type, search your inbox, or show everything. Urgent is
-          ranked most-pressing first.
+          Filter by type, search, or show everything. Click an email to read it
+          and check Asana for a matching task.
         </p>
       </div>
 
-      {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
@@ -129,9 +227,7 @@ export default function Inbox() {
       {messages !== null && (
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
           {messages.length} result{messages.length === 1 ? "" : "s"}
-          {active === "urgent" && messages.length > 0
-            ? " · ranked by urgency"
-            : ""}
+          {active === "urgent" && messages.length > 0 ? " · ranked by urgency" : ""}
         </p>
       )}
 
@@ -142,36 +238,39 @@ export default function Inbox() {
           </li>
         )}
         {messages?.map((m) => (
-          <li
-            key={m.id}
-            className="rounded-xl border border-line bg-surface px-4 py-3 transition hover:border-accent/60 hover:shadow-sm"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm font-semibold text-ink">
-                {m.subject || "(no subject)"}
-              </span>
-              <span className="shrink-0 text-xs text-muted">
-                {formatDate(m.date)}
-              </span>
-            </div>
-            <span className="mt-0.5 block truncate text-xs text-muted">
-              {cleanFrom(m.from)}
-            </span>
-            {m.reasons && m.reasons.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {m.reasons.slice(0, 4).map((r) => (
-                  <span
-                    key={r}
-                    className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-brand"
-                  >
-                    {r}
-                  </span>
-                ))}
+          <li key={m.id}>
+            <button
+              type="button"
+              onClick={() => openMessage(m.id)}
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-left transition hover:border-accent/60 hover:shadow-sm"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="truncate text-sm font-semibold text-ink">
+                  {m.subject || "(no subject)"}
+                </span>
+                <span className="shrink-0 text-xs text-muted">
+                  {formatDate(m.date)}
+                </span>
               </div>
-            )}
-            <span className="mt-1.5 block line-clamp-2 text-sm text-ink/70">
-              {m.snippet}
-            </span>
+              <span className="mt-0.5 block truncate text-xs text-muted">
+                {cleanFrom(m.from)}
+              </span>
+              {m.reasons && m.reasons.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {m.reasons.slice(0, 4).map((r) => (
+                    <span
+                      key={r}
+                      className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-brand"
+                    >
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="mt-1.5 block line-clamp-2 text-sm text-ink/70">
+                {m.snippet}
+              </span>
+            </button>
           </li>
         ))}
       </ul>
@@ -185,11 +284,87 @@ export default function Inbox() {
   );
 }
 
-/**
- * "Jane Doe <jane@x.com>" -> "Jane Doe" when a display name is present.
- * Also strips Square's relay suffix so a form entry shows the customer, e.g.
- * "danny@x.com via orders <orders@lastmile.cafe>" -> "danny@x.com".
- */
+/** Asana match panel — styled by how confident the match is. */
+function AsanaMatchBlock({ asana }: { asana: AsanaMatch }) {
+  if (!asana.connected) {
+    return (
+      <div className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-muted">
+        <a href="/api/asana/connect" className="font-medium text-brand hover:underline">
+          Connect Asana
+        </a>{" "}
+        to check for a matching task.
+      </div>
+    );
+  }
+
+  const conf = asana.confidence ?? "none";
+
+  if (conf === "none" || !asana.match) {
+    return (
+      <div className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
+        No matching Asana task found.
+      </div>
+    );
+  }
+
+  const styles: Record<string, { box: string; label: string; tag: string }> = {
+    high: {
+      box: "border-green-300 bg-green-50",
+      label: "✓ Matching task in Asana",
+      tag: "text-green-700",
+    },
+    medium: {
+      box: "border-amber-300 bg-amber-50",
+      label: "Likely match — worth verifying",
+      tag: "text-amber-700",
+    },
+    low: {
+      box: "border-line bg-cream",
+      label: "Possible match (low confidence)",
+      tag: "text-muted",
+    },
+  };
+  const s = styles[conf];
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${s.box}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${s.tag}`}>
+        {s.label}
+      </p>
+      <a
+        href={asana.match.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1 block text-sm font-medium text-ink hover:underline"
+      >
+        {asana.match.name}
+      </a>
+      {asana.alternates && asana.alternates.length > 0 && (
+        <div className="mt-2 border-t border-line/70 pt-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
+            Other possibilities
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {asana.alternates.map((a) => (
+              <li key={a.gid}>
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-ink/70 hover:underline"
+                >
+                  {a.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Jane Doe <jane@x.com>" -> "Jane Doe"; strips Square's "via orders" relay. */
 function cleanFrom(from: string): string {
   const match = from.match(/^\s*"?([^"<]+?)"?\s*<.+>\s*$/);
   const name = match ? match[1].trim() : from;

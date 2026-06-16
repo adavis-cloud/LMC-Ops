@@ -183,6 +183,31 @@ export async function getProjectTasksByName(
   return getProjectTasks(accessToken, match.gid);
 }
 
+/** Search tasks by free text (workspace typeahead). Used for email matching. */
+export async function searchTasks(
+  accessToken: string,
+  query: string,
+): Promise<AsanaTask[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const workspace = await getWorkspaceId(accessToken);
+  const data = await apiGet(accessToken, `/workspaces/${workspace}/typeahead`, {
+    resource_type: "task",
+    query: q,
+    count: "20",
+    opt_fields: "name,permalink_url",
+  });
+  return (data as { gid: string; name: string; permalink_url: string }[]).map(
+    (t) => ({
+      gid: t.gid,
+      name: t.name,
+      dueOn: null,
+      url: t.permalink_url,
+      projects: [],
+    }),
+  );
+}
+
 export interface AsanaProject {
   gid: string;
   name: string;
