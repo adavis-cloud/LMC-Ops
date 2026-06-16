@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getMessage } from "@/lib/gmail";
-import { searchTasks, AsanaTask } from "@/lib/asana";
+import {
+  getMyTasks,
+  getProjectTasksByName,
+  PINNED_PROJECT_NAME,
+  AsanaTask,
+} from "@/lib/asana";
 import { getValidAccessToken } from "@/lib/asana-session";
 import { matchTasks, EmailFields } from "@/lib/match";
 
@@ -49,11 +54,17 @@ export async function GET(
     if (!asanaToken) {
       asana = { connected: false as const };
     } else {
-      const queries = Array.from(new Set([name, email].filter(Boolean)));
+      // Candidate pool from tasks we can already read (no extra Asana scope):
+      // the user's assigned tasks + the pinned "Outgoing Activity" project.
+      const pools = await Promise.allSettled([
+        getMyTasks(asanaToken),
+        getProjectTasksByName(asanaToken, PINNED_PROJECT_NAME),
+      ]);
       const seen = new Set<string>();
       const candidates: AsanaTask[] = [];
-      for (const q of queries) {
-        for (const t of await searchTasks(asanaToken, q)) {
+      for (const p of pools) {
+        if (p.status !== "fulfilled") continue;
+        for (const t of p.value) {
           if (!seen.has(t.gid)) {
             seen.add(t.gid);
             candidates.push(t);
