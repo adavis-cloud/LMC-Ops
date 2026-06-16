@@ -25,6 +25,12 @@ interface AsanaMatch {
   match?: TaskRef;
   alternates?: TaskRef[];
 }
+interface TaskDraft {
+  name: string;
+  section: string;
+  dueOn: string | null;
+  notes: string;
+}
 interface MessageDetail {
   message: {
     id: string;
@@ -36,6 +42,7 @@ interface MessageDetail {
     labelIds: string[];
   };
   asana: AsanaMatch;
+  draftTask: TaskDraft;
 }
 
 const FILTERS = [
@@ -66,6 +73,17 @@ export default function Inbox() {
   const [draft, setDraft] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [noteStatus, setNoteStatus] = useState<string | null>(null);
+
+  // Create-task form
+  const [showCreate, setShowCreate] = useState(false);
+  const [sections, setSections] = useState<{ gid: string; name: string }[] | null>(null);
+  const [tName, setTName] = useState("");
+  const [tSection, setTSection] = useState("");
+  const [tDue, setTDue] = useState("");
+  const [tNotes, setTNotes] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createMsg, setCreateMsg] = useState<string | null>(null);
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -114,6 +132,9 @@ export default function Inbox() {
     setNoteStatus(null);
     setNote("");
     setDraft(null);
+    setShowCreate(false);
+    setCreatedUrl(null);
+    setCreateMsg(null);
     try {
       const res = await fetch(`/api/gmail/message/${id}`);
       const data = await res.json();
@@ -192,6 +213,52 @@ export default function Inbox() {
     setDraft(
       `Hi ${first},\n\nThanks for reaching out!\n\n\n\nBest,\nLast Mile Cafe\n\n----- Original message -----\n${quoted}`,
     );
+  }
+
+  async function openCreate() {
+    if (!detail) return;
+    setTName(detail.draftTask.name);
+    setTSection(detail.draftTask.section);
+    setTDue(detail.draftTask.dueOn ?? "");
+    setTNotes(detail.draftTask.notes);
+    setCreateMsg(null);
+    setCreatedUrl(null);
+    setShowCreate(true);
+    if (!sections) {
+      try {
+        const res = await fetch("/api/asana/sections");
+        const data = await res.json();
+        if (res.ok) setSections(data.sections);
+      } catch {
+        /* dropdown falls back to the guessed section */
+      }
+    }
+  }
+
+  async function submitCreate() {
+    if (!tName.trim()) return;
+    setCreateBusy(true);
+    setCreateMsg(null);
+    try {
+      const res = await fetch("/api/asana/create-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: tName,
+          notes: tNotes,
+          dueOn: tDue || null,
+          section: tSection || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to create task");
+      setCreatedUrl(data.task.url);
+      setShowCreate(false);
+    } catch (err) {
+      setCreateMsg(err instanceof Error ? err.message : "Failed to create task");
+    } finally {
+      setCreateBusy(false);
+    }
   }
 
   // ---- Detail view ----
@@ -314,6 +381,131 @@ export default function Inbox() {
                 {noteStatus && <p className="text-xs text-muted">{noteStatus}</p>}
               </div>
             </div>
+
+            {detail.asana.connected && (
+              <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-ink">Add to Asana</h3>
+                  {!showCreate && !createdUrl && (
+                    <button
+                      type="button"
+                      onClick={openCreate}
+                      className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream"
+                    >
+                      Create task
+                    </button>
+                  )}
+                </div>
+
+                {!showCreate &&
+                  !createdUrl &&
+                  detail.asana.match &&
+                  (detail.asana.confidence === "high" ||
+                    detail.asana.confidence === "medium") && (
+                    <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      A task may already exist:{" "}
+                      <span className="font-medium">{detail.asana.match.name}</span>
+                      {detail.asana.match.section
+                        ? ` (${detail.asana.match.section})`
+                        : ""}{" "}
+                      — check before creating a duplicate.
+                    </p>
+                  )}
+
+                {createdUrl && (
+                  <p className="text-sm text-green-700">
+                    ✓ Created —{" "}
+                    <a
+                      href={createdUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium underline"
+                    >
+                      open in Asana
+                    </a>
+                  </p>
+                )}
+                {createMsg && !createdUrl && (
+                  <p className="text-xs text-red-700">{createMsg}</p>
+                )}
+
+                {showCreate && (
+                  <div className="flex flex-col gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                        Task name
+                      </span>
+                      <input
+                        value={tName}
+                        onChange={(e) => setTName(e.target.value)}
+                        className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                          Section
+                        </span>
+                        <select
+                          value={tSection}
+                          onChange={(e) => setTSection(e.target.value)}
+                          className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        >
+                          <option value="">No section</option>
+                          {(sections ??
+                            (tSection ? [{ gid: tSection, name: tSection }] : [])).map(
+                            (s) => (
+                              <option key={s.gid} value={s.name}>
+                                {s.name}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                          Due date
+                        </span>
+                        <input
+                          type="date"
+                          value={tDue}
+                          onChange={(e) => setTDue(e.target.value)}
+                          className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        />
+                      </label>
+                    </div>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                        Notes
+                      </span>
+                      <textarea
+                        value={tNotes}
+                        onChange={(e) => setTNotes(e.target.value)}
+                        rows={8}
+                        className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      />
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={submitCreate}
+                        disabled={createBusy || !tName.trim()}
+                        className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-cream transition hover:bg-brand-hover disabled:opacity-50"
+                      >
+                        {createBusy ? "Creating…" : "Create task"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreate(false)}
+                        className="text-sm text-muted hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </section>

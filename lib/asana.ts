@@ -31,7 +31,12 @@ export interface AsanaTask {
  * Read-only granular scopes we request. These must also be enabled on the
  * Asana app (OAuth → "Specific scopes"). We never write, so reads only.
  */
-const SCOPES = ["users:read", "projects:read", "tasks:read"].join(" ");
+const SCOPES = [
+  "users:read",
+  "projects:read",
+  "tasks:read",
+  "tasks:write", // create tasks from emails
+].join(" ");
 
 /** Build the URL we send the user to so they can authorize the app. */
 export function authorizeUrl(redirectUri: string, state: string): string {
@@ -104,6 +109,20 @@ async function apiGet(
   const res = await fetch(u, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(`Asana API ${path} failed: ${JSON.stringify(json)}`);
+  return json.data;
+}
+
+async function apiPost(accessToken: string, path: string, data: unknown) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ data }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(`Asana API ${path} failed: ${JSON.stringify(json)}`);
@@ -221,6 +240,57 @@ export const PINNED_PROJECT_NAME = "Outgoing Activity";
 export interface AsanaProject {
   gid: string;
   name: string;
+}
+
+/** Resolve a project gid by name (case-insensitive). */
+export async function findProjectGid(
+  accessToken: string,
+  name: string,
+): Promise<string> {
+  const projects = await listProjects(accessToken);
+  const match = projects.find(
+    (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
+  if (!match) throw new Error(`No Asana project named "${name}" found.`);
+  return match.gid;
+}
+
+/** Sections within a project (the order categories). */
+export async function listSections(
+  accessToken: string,
+  projectGid: string,
+): Promise<AsanaProject[]> {
+  const data = await apiGet(accessToken, `/projects/${projectGid}/sections`, {
+    opt_fields: "name",
+  });
+  return (data as AsanaProject[]).map((s) => ({ gid: s.gid, name: s.name }));
+}
+
+export interface NewTask {
+  name: string;
+  notes: string;
+  dueOn?: string | null;
+  projectGid: string;
+  sectionGid?: string | null;
+}
+
+/** Create a task in a project, optionally placed in a section. */
+export async function createTask(
+  accessToken: string,
+  t: NewTask,
+): Promise<{ gid: string; name: string; url: string }> {
+  const created = await apiPost(accessToken, "/tasks?opt_fields=permalink_url,name", {
+    name: t.name,
+    notes: t.notes,
+    projects: [t.projectGid],
+    ...(t.dueOn ? { due_on: t.dueOn } : {}),
+  });
+  if (t.sectionGid) {
+    await apiPost(accessToken, `/sections/${t.sectionGid}/addTask`, {
+      task: created.gid,
+    });
+  }
+  return { gid: created.gid, name: created.name, url: created.permalink_url };
 }
 
 /** Non-archived projects in the user's workspace (for the picker). */

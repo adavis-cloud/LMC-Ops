@@ -9,6 +9,7 @@ import {
 } from "@/lib/asana";
 import { getValidAccessToken } from "@/lib/asana-session";
 import { matchTasks, EmailFields } from "@/lib/match";
+import { buildTaskDraft } from "@/lib/draft";
 
 /** Resolve the customer's { name, email } from the headers / Square form. */
 function parseSender(from: string, subject: string, body: string) {
@@ -88,7 +89,9 @@ export async function GET(
       asana = { connected: true as const, ...matchTasks(email_, candidates) };
     }
 
-    return NextResponse.json({ message, asana });
+    const draftTask = buildTaskDraft(message, { name, email });
+
+    return NextResponse.json({ message, asana, draftTask });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
