@@ -16,9 +16,14 @@ export const FILTERS: Record<string, FilterDef> = {
   catering: {
     label: "Catering",
     query:
-      '(catering OR cater OR "coffee box" OR "coffee traveler" OR airpot OR ' +
-      'carafe OR platter OR "large order" OR "order for" OR event OR party OR ' +
-      'wedding OR meeting OR guests OR "office coffee" OR "drop off") ' +
+      // events/parties/weddings
+      "(catering OR cater OR event OR party OR wedding OR meeting OR guests OR " +
+      // product names
+      '"coffee box" OR "box of coffee" OR "coffee traveler" OR airpot OR carafe OR ' +
+      'platter OR "pastry tray" OR pastries OR "large order" OR "order for" OR ' +
+      // office / recurring
+      '"office coffee" OR "for the office" OR "for our team" OR "recurring order" OR ' +
+      '"standing order" OR "weekly delivery" OR "drop off") ' +
       "newer_than:1y -category:promotions",
   },
   wholesale: {
