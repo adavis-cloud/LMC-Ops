@@ -36,8 +36,17 @@ export async function GET(req: NextRequest) {
   const showAll = req.nextUrl.searchParams.get("all");
   const typed = req.nextUrl.searchParams.get("q")?.trim();
 
-  const q = filter ? filter.query : showAll ? "in:inbox" : typed || DEFAULT_QUERY;
+  const base = filter ? filter.query : showAll ? "in:inbox" : typed || DEFAULT_QUERY;
   const ranked = !!filter?.ranked;
+
+  // Read/unread status comes straight from Gmail via is:read / is:unread.
+  const read = req.nextUrl.searchParams.get("read");
+  const q =
+    read === "unread"
+      ? `${base} is:unread`
+      : read === "read"
+        ? `${base} is:read`
+        : base;
 
   try {
     // Ranked filters cast a wider net since scoring decides what surfaces.

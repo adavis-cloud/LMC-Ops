@@ -59,6 +59,7 @@ export async function GET(
         business: parsed.business,
         body: message.body,
         selfEmail: session.user?.email ?? undefined,
+        emailDate: message.date,
       };
       asana = { connected: true as const, ...matchTasks(fields, candidates) };
     }

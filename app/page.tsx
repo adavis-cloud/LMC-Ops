@@ -82,6 +82,14 @@ export default async function Home() {
             >
               Asana ↗
             </a>
+            <a
+              href="/slack"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-cream"
+            >
+              Slack ↗
+            </a>
             <form
               action={async () => {
                 "use server";

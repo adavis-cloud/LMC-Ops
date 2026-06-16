@@ -18,6 +18,8 @@ export interface AsanaTask {
   gid: string;
   name: string;
   dueOn: string | null;
+  /** ISO timestamp of the task's last activity — our recency signal. */
+  modifiedAt: string | null;
   url: string;
   projects: string[];
   completed: boolean;
@@ -140,13 +142,14 @@ export async function getWorkspaceId(accessToken: string): Promise<string> {
 }
 
 const TASK_FIELDS =
-  "name,due_on,permalink_url,projects.name,completed,notes," +
+  "name,due_on,modified_at,permalink_url,projects.name,completed,notes," +
   "memberships.project.name,memberships.section.name";
 
 interface RawTask {
   gid: string;
   name: string;
   due_on: string | null;
+  modified_at?: string;
   permalink_url: string;
   projects?: { name: string }[];
   completed?: boolean;
@@ -165,6 +168,7 @@ function toTask(t: RawTask): AsanaTask {
     gid: t.gid,
     name: t.name,
     dueOn: t.due_on ?? null,
+    modifiedAt: t.modified_at ?? null,
     url: t.permalink_url,
     projects: (t.projects ?? []).map((p) => p.name),
     completed: t.completed ?? false,
@@ -272,9 +276,11 @@ export interface NewTask {
   dueOn?: string | null;
   projectGid: string;
   sectionGid?: string | null;
+  /** Asana user gid to assign the task to (e.g. from the Slack roster). */
+  assignee?: string | null;
 }
 
-/** Create a task in a project, optionally placed in a section. */
+/** Create a task in a project, optionally placed in a section / assigned. */
 export async function createTask(
   accessToken: string,
   t: NewTask,
@@ -284,6 +290,7 @@ export async function createTask(
     notes: t.notes,
     projects: [t.projectGid],
     ...(t.dueOn ? { due_on: t.dueOn } : {}),
+    ...(t.assignee ? { assignee: t.assignee } : {}),
   });
   if (t.sectionGid) {
     await apiPost(accessToken, `/sections/${t.sectionGid}/addTask`, {
@@ -300,6 +307,26 @@ export async function addComment(
   text: string,
 ): Promise<void> {
   await apiPost(accessToken, `/tasks/${taskGid}/stories`, { text });
+}
+
+export interface AsanaUser {
+  gid: string;
+  name: string;
+  email?: string;
+}
+
+/** Members of the user's workspace (for the Slack→Asana roster picker). */
+export async function listUsers(accessToken: string): Promise<AsanaUser[]> {
+  const workspace = await getWorkspaceId(accessToken);
+  const data = await apiGet(accessToken, `/workspaces/${workspace}/users`, {
+    opt_fields: "name,email",
+    limit: "100",
+  });
+  return (data as AsanaUser[]).map((u) => ({
+    gid: u.gid,
+    name: u.name,
+    email: u.email,
+  }));
 }
 
 /** Non-archived projects in the user's workspace (for the picker). */

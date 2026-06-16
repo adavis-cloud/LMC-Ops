@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
 import { AsanaToken, refreshAccessToken } from "./asana";
+import { mirrorAsanaToken } from "./asana-store";
 
 const COOKIE = "asana_session";
 
-/** Persist the Asana token in an httpOnly cookie. */
+/** Persist the Asana token in an httpOnly cookie (and mirror it to KV). */
 export async function writeAsanaToken(token: AsanaToken) {
   const store = await cookies();
   store.set(COOKIE, JSON.stringify(token), {
@@ -13,6 +14,8 @@ export async function writeAsanaToken(token: AsanaToken) {
     path: "/",
     maxAge: 60 * 60 * 24 * 60, // 60 days (refresh token lifetime headroom)
   });
+  // Mirror to KV so Slack-triggered automation can use it without a cookie.
+  await mirrorAsanaToken(token);
 }
 
 export async function clearAsanaToken() {
@@ -44,7 +47,11 @@ export async function getValidAccessToken(): Promise<string | null> {
   const token = await readAsanaToken();
   if (!token) return null;
 
-  if (Date.now() < token.expires_at - 60_000) return token.access_token;
+  if (Date.now() < token.expires_at - 60_000) {
+    // Keep the KV mirror fresh for background automation.
+    await mirrorAsanaToken(token);
+    return token.access_token;
+  }
 
   if (!token.refresh_token) return null;
   try {

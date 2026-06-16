@@ -13,6 +13,9 @@ export interface EmailFields {
   /** The signed-in user's own address. Lets us tell an outside customer apart
    *  from ourselves / a teammate, so our own domain is never an "org" signal. */
   selfEmail?: string;
+  /** The email's Date header — used to down-rank stale tasks (a 2025 order is
+   *  not the live match for a 2026 email). */
+  emailDate?: string;
 }
 
 export interface TaskRef {
@@ -120,6 +123,23 @@ function greetingName(body: string): string {
   return m?.[1]?.toLowerCase() ?? "";
 }
 
+/**
+ * How many days older than the email a task's last activity can be before it's
+ * considered stale. ~6 months: a new inbound email about a recurring order is
+ * very unlikely to belong to a task untouched since last season.
+ */
+const STALE_DAYS = 180;
+
+/** Days between the email and the task's last activity (null if either unknown). */
+function staleDays(emailDate: string | undefined, task: AsanaTask): number | null {
+  const taskDate = task.modifiedAt ?? task.dueOn;
+  if (!emailDate || !taskDate) return null;
+  const e = Date.parse(emailDate);
+  const t = Date.parse(taskDate);
+  if (Number.isNaN(e) || Number.isNaN(t)) return null;
+  return (e - t) / 86_400_000;
+}
+
 /** "aochoa@ayayouth.org" -> "ayayouth" (org name); "" for personal providers. */
 function orgRoot(senderEmail: string): string {
   const domain = senderEmail.split("@")[1]?.toLowerCase();
@@ -211,6 +231,21 @@ function scoreTask(email: EmailFields, task: AsanaTask): Scored {
     score += Math.min(0.5, (shared / subjTokens.size) * 0.5);
   }
 
+  // A finished task is probably already-handled history, not the live match for
+  // a fresh inbound email — so an open task with the same evidence always wins.
+  if (task.completed) {
+    score -= 1.5;
+    reasons.push("already completed");
+  }
+
+  // Stale task: last touched long before this email arrived (e.g. last year's
+  // order). Down-rank in proportion to how far past the window it is.
+  const age = staleDays(email.emailDate, task);
+  if (age !== null && age > STALE_DAYS) {
+    score -= 0.5 + Math.min(1.0, (age - STALE_DAYS) / 365);
+    reasons.push("older than this email");
+  }
+
   return { score, reasons };
 }
 
@@ -236,8 +271,14 @@ export function matchTasks(email: EmailFields, tasks: AsanaTask[]): MatchResult 
   if (scored.length === 0) return { confidence: "none", alternates: [] };
 
   const best = scored[0];
-  const confidence: Confidence =
+  let confidence: Confidence =
     best.score >= 3 ? "high" : best.score >= 1.5 ? "medium" : "low";
+
+  // A completed or stale task may still be the most relevant thing we found, but
+  // it must never be presented as a confident live match — cap it at "low".
+  const isStale =
+    best.task.completed || (staleDays(email.emailDate, best.task) ?? 0) > STALE_DAYS;
+  if (isStale && confidence !== "low") confidence = "low";
 
   return {
     confidence,
