@@ -23,6 +23,8 @@ export interface AsanaTask {
   completed: boolean;
   /** Task description — often holds the pasted Square form (incl. customer email). */
   notes: string;
+  /** Section within Outgoing Activity, e.g. WHOLESALE / CATERING / SUBSCRIPTIONS. */
+  section: string;
 }
 
 /**
@@ -118,7 +120,9 @@ export async function getWorkspaceId(accessToken: string): Promise<string> {
   return ws.gid;
 }
 
-const TASK_FIELDS = "name,due_on,permalink_url,projects.name,completed,notes";
+const TASK_FIELDS =
+  "name,due_on,permalink_url,projects.name,completed,notes," +
+  "memberships.project.name,memberships.section.name";
 
 interface RawTask {
   gid: string;
@@ -128,6 +132,13 @@ interface RawTask {
   projects?: { name: string }[];
   completed?: boolean;
   notes?: string;
+  memberships?: { project?: { name: string }; section?: { name: string } }[];
+}
+
+function sectionOf(t: RawTask): string {
+  const mems = t.memberships ?? [];
+  const pinned = mems.find((m) => m.project?.name === PINNED_PROJECT_NAME);
+  return (pinned?.section?.name ?? mems[0]?.section?.name ?? "").trim();
 }
 
 function toTask(t: RawTask): AsanaTask {
@@ -139,6 +150,7 @@ function toTask(t: RawTask): AsanaTask {
     projects: (t.projects ?? []).map((p) => p.name),
     completed: t.completed ?? false,
     notes: t.notes ?? "",
+    section: sectionOf(t),
   };
 }
 

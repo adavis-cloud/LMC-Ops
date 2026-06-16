@@ -17,6 +17,7 @@ interface TaskRef {
   name: string;
   url: string;
   completed: boolean;
+  section: string;
 }
 interface AsanaMatch {
   connected: boolean;
@@ -497,6 +498,11 @@ function AsanaMatchBlock({ asana }: { asana: AsanaMatch }) {
         >
           {asana.match.name}
         </a>
+        {asana.match.section && (
+          <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-brand">
+            {asana.match.section}
+          </span>
+        )}
         {asana.match.completed && (
           <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
             Done
