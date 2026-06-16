@@ -21,6 +21,8 @@ export interface AsanaTask {
   url: string;
   projects: string[];
   completed: boolean;
+  /** Task description — often holds the pasted Square form (incl. customer email). */
+  notes: string;
 }
 
 /**
@@ -116,7 +118,7 @@ export async function getWorkspaceId(accessToken: string): Promise<string> {
   return ws.gid;
 }
 
-const TASK_FIELDS = "name,due_on,permalink_url,projects.name,completed";
+const TASK_FIELDS = "name,due_on,permalink_url,projects.name,completed,notes";
 
 interface RawTask {
   gid: string;
@@ -125,6 +127,7 @@ interface RawTask {
   permalink_url: string;
   projects?: { name: string }[];
   completed?: boolean;
+  notes?: string;
 }
 
 function toTask(t: RawTask): AsanaTask {
@@ -135,6 +138,7 @@ function toTask(t: RawTask): AsanaTask {
     url: t.permalink_url,
     projects: (t.projects ?? []).map((p) => p.name),
     completed: t.completed ?? false,
+    notes: t.notes ?? "",
   };
 }
 
