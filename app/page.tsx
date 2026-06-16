@@ -1,5 +1,7 @@
 import { auth, signIn, signOut } from "@/auth";
 import Inbox from "@/app/inbox";
+import Asana from "@/app/asana";
+import { isAsanaConnected } from "@/lib/asana-session";
 
 function Logo({ className = "" }: { className?: string }) {
   return (
@@ -24,7 +26,11 @@ function Logo({ className = "" }: { className?: string }) {
   );
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ asana?: string }>;
+}) {
   const session = await auth();
 
   if (!session?.user) {
@@ -91,6 +97,7 @@ export default async function Home() {
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
         <Inbox />
+        <Asana connected={await isAsanaConnected()} notice={(await searchParams).asana} />
       </div>
     </main>
   );
