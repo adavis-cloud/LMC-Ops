@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getMyTasks, getProjectTasks } from "@/lib/asana";
+import {
+  getMyTasks,
+  getProjectTasks,
+  getProjectTasksByName,
+} from "@/lib/asana";
 import { getValidAccessToken } from "@/lib/asana-session";
+
+/** The pinned project shown by the "Outgoing Activity" button. */
+const OUTGOING_PROJECT_NAME = "Outgoing Activity";
 
 /**
  * GET /api/asana/tasks?view=mine|due|project[&project=GID]
@@ -25,7 +32,9 @@ export async function GET(req: NextRequest) {
 
   try {
     let tasks;
-    if (view === "project") {
+    if (view === "outgoing") {
+      tasks = await getProjectTasksByName(accessToken, OUTGOING_PROJECT_NAME);
+    } else if (view === "project") {
       if (!projectId) {
         return NextResponse.json({ error: "Missing project" }, { status: 400 });
       }

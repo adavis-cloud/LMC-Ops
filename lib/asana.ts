@@ -170,6 +170,19 @@ export async function getProjectTasks(
   return data.map(toTask);
 }
 
+/** Incomplete tasks in the project matching this name (case-insensitive). */
+export async function getProjectTasksByName(
+  accessToken: string,
+  name: string,
+): Promise<AsanaTask[]> {
+  const projects = await listProjects(accessToken);
+  const match = projects.find(
+    (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
+  if (!match) throw new Error(`No Asana project named "${name}" found.`);
+  return getProjectTasks(accessToken, match.gid);
+}
+
 export interface AsanaProject {
   gid: string;
   name: string;

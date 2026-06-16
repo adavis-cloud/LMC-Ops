@@ -9,15 +9,10 @@ interface AsanaTask {
   url: string;
   projects: string[];
 }
-interface AsanaProject {
-  gid: string;
-  name: string;
-}
 
 const VIEWS = [
   { key: "mine", label: "My tasks" },
-  { key: "due", label: "Due soon" },
-  { key: "project", label: "Project" },
+  { key: "outgoing", label: "Outgoing Activity" },
 ] as const;
 
 export default function Asana({
@@ -29,17 +24,15 @@ export default function Asana({
 }) {
   const [view, setView] = useState<string | null>(null);
   const [tasks, setTasks] = useState<AsanaTask[] | null>(null);
-  const [projects, setProjects] = useState<AsanaProject[] | null>(null);
-  const [projectId, setProjectId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadTasks(v: string, pid?: string) {
+  async function pickView(v: string) {
+    setView(v);
     setLoading(true);
     setError(null);
     try {
-      const qs = v === "project" ? `view=project&project=${pid}` : `view=${v}`;
-      const res = await fetch(`/api/asana/tasks?${qs}`);
+      const res = await fetch(`/api/asana/tasks?view=${v}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Asana request failed");
       setTasks(data.tasks);
@@ -48,25 +41,6 @@ export default function Asana({
       setTasks(null);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function pickView(v: string) {
-    setView(v);
-    if (v === "project") {
-      setTasks(null);
-      if (!projects) {
-        try {
-          const res = await fetch("/api/asana/projects");
-          const data = await res.json();
-          if (res.ok) setProjects(data.projects);
-          else throw new Error(data.error);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Couldn't load projects");
-        }
-      }
-    } else {
-      loadTasks(v);
     }
   }
 
@@ -130,26 +104,6 @@ export default function Asana({
               </button>
             ))}
           </div>
-
-          {view === "project" && (
-            <select
-              value={projectId}
-              onChange={(e) => {
-                setProjectId(e.target.value);
-                if (e.target.value) loadTasks("project", e.target.value);
-              }}
-              className="w-fit rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
-            >
-              <option value="">
-                {projects ? "Choose a project…" : "Loading projects…"}
-              </option>
-              {projects?.map((p) => (
-                <option key={p.gid} value={p.gid}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
 
           {error && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
