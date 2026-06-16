@@ -34,6 +34,12 @@ export const FILTERS: Record<string, FilterDef> = {
       '"for our shop" OR "for our store" OR "for our cafe") ' +
       "newer_than:1y -category:promotions",
   },
+  square: {
+    label: "Square forms",
+    // Square Online contact-form notifications all arrive with this subject:
+    //   "New Form Entry from <customer email>: <form name>"
+    query: 'subject:"New Form Entry" newer_than:1y',
+  },
   urgent: {
     label: "Urgent",
     ranked: true,

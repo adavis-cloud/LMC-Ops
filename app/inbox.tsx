@@ -15,6 +15,7 @@ interface GmailMessage {
 const FILTERS = [
   { key: "catering", label: "Catering" },
   { key: "wholesale", label: "Wholesale" },
+  { key: "square", label: "Square forms" },
   { key: "urgent", label: "Urgent" },
 ] as const;
 
@@ -183,10 +184,15 @@ export default function Inbox() {
   );
 }
 
-/** "Jane Doe <jane@x.com>" -> "Jane Doe" when a display name is present. */
+/**
+ * "Jane Doe <jane@x.com>" -> "Jane Doe" when a display name is present.
+ * Also strips Square's relay suffix so a form entry shows the customer, e.g.
+ * "danny@x.com via orders <orders@lastmile.cafe>" -> "danny@x.com".
+ */
 function cleanFrom(from: string): string {
   const match = from.match(/^\s*"?([^"<]+?)"?\s*<.+>\s*$/);
-  return match ? match[1].trim() : from;
+  const name = match ? match[1].trim() : from;
+  return name.replace(/\s+via\s+\S+$/i, "").trim();
 }
 
 function formatDate(raw: string): string {
