@@ -13,6 +13,8 @@ export interface GmailMessage {
   subject: string;
   date: string;
   snippet: string;
+  /** Gmail system labels, e.g. UNREAD, IMPORTANT, STARRED. */
+  labelIds: string[];
 }
 
 interface ListResponse {
@@ -85,6 +87,7 @@ export async function searchMessages(
         subject: header(headers, "Subject"),
         date: header(headers, "Date"),
         snippet: (data.snippet ?? "") as string,
+        labelIds: (data.labelIds ?? []) as string[],
       } satisfies GmailMessage;
     }),
   );

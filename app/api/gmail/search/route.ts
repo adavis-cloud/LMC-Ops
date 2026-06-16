@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { searchMessages } from "@/lib/gmail";
+import { FILTERS, rankByUrgency } from "@/lib/filters";
 
 /**
  * Default search aimed at catering / wholesale inquiries.
@@ -29,14 +30,25 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // `all=1` ignores the filter and returns the latest inbox messages.
+  // Resolve the query: a named filter, "show all", a typed query, or default.
+  const filterKey = req.nextUrl.searchParams.get("filter");
+  const filter = filterKey ? FILTERS[filterKey] : undefined;
   const showAll = req.nextUrl.searchParams.get("all");
   const typed = req.nextUrl.searchParams.get("q")?.trim();
-  const q = showAll ? "in:inbox" : typed || DEFAULT_QUERY;
+
+  const q = filter ? filter.query : showAll ? "in:inbox" : typed || DEFAULT_QUERY;
+  const ranked = !!filter?.ranked;
 
   try {
-    const messages = await searchMessages(session.accessToken, q, 25);
-    return NextResponse.json({ query: q, count: messages.length, messages });
+    // Ranked filters cast a wider net since scoring decides what surfaces.
+    const messages = await searchMessages(session.accessToken, q, ranked ? 40 : 25);
+    const result = ranked ? rankByUrgency(messages) : messages;
+    return NextResponse.json({
+      filter: filterKey ?? null,
+      query: q,
+      count: result.length,
+      messages: result,
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
