@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sendSelfEmail } from "@/lib/gmail";
+import { sendSelfEmail, GmailScopeError } from "@/lib/gmail";
 
 /**
  * POST { note, subject } — email a note to YOURSELF about an inquiry.
@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, sentTo: self });
   } catch (err) {
     console.error(err);
+    if (err instanceof GmailScopeError) {
+      return NextResponse.json({ error: err.message, reauth: true }, { status: 403 });
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to send note" },
       { status: 502 },

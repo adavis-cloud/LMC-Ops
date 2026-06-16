@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getMessage, modifyLabels } from "@/lib/gmail";
+import { getMessage, modifyLabels, GmailScopeError } from "@/lib/gmail";
 import {
   getMyTasks,
   getProjectTasksByName,
@@ -58,6 +58,7 @@ export async function GET(
         senderEmail: parsed.email,
         business: parsed.business,
         body: message.body,
+        selfEmail: session.user?.email ?? undefined,
       };
       asana = { connected: true as const, ...matchTasks(fields, candidates) };
     }
@@ -101,6 +102,9 @@ export async function POST(
     return NextResponse.json({ labelIds });
   } catch (err) {
     console.error(err);
+    if (err instanceof GmailScopeError) {
+      return NextResponse.json({ error: err.message, reauth: true }, { status: 403 });
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Action failed" },
       { status: 502 },

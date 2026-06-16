@@ -120,6 +120,30 @@ export async function getMessage(
   };
 }
 
+/**
+ * Thrown when Gmail rejects a write because the OAuth token is missing the
+ * `gmail.modify` scope (e.g. the user consented under an older read-only grant).
+ * The fix is always re-consent, so the UI treats this specially.
+ */
+export class GmailScopeError extends Error {
+  constructor(
+    message = "Google permission is insufficient — reconnect your Google account.",
+  ) {
+    super(message);
+    this.name = "GmailScopeError";
+  }
+}
+
+/** Google flags a missing-scope rejection with a specific 403 reason string. */
+function isScopeError(status: number, body: string): boolean {
+  return (
+    status === 403 &&
+    /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(
+      body,
+    )
+  );
+}
+
 /** Add/remove Gmail system labels on a message (e.g. mark read, star). */
 export async function modifyLabels(
   accessToken: string,
@@ -138,7 +162,9 @@ export async function modifyLabels(
     }),
   });
   if (!res.ok) {
-    throw new Error(`Gmail modify failed (${res.status}): ${await res.text()}`);
+    const text = await res.text();
+    if (isScopeError(res.status, text)) throw new GmailScopeError();
+    throw new Error(`Gmail modify failed (${res.status}): ${text}`);
   }
   const data = await res.json();
   return (data.labelIds ?? []) as string[];
@@ -179,7 +205,9 @@ export async function sendSelfEmail(
     body: JSON.stringify({ raw }),
   });
   if (!res.ok) {
-    throw new Error(`Gmail send failed (${res.status}): ${await res.text()}`);
+    const text = await res.text();
+    if (isScopeError(res.status, text)) throw new GmailScopeError();
+    throw new Error(`Gmail send failed (${res.status}): ${text}`);
   }
 }
 

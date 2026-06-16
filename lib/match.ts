@@ -10,6 +10,9 @@ export interface EmailFields {
    *  not the sender, so we mine the body for names/orgs too. */
   body?: string;
   business?: string;
+  /** The signed-in user's own address. Lets us tell an outside customer apart
+   *  from ourselves / a teammate, so our own domain is never an "org" signal. */
+  selfEmail?: string;
 }
 
 export interface TaskRef {
@@ -41,6 +44,37 @@ const FREE_EMAIL = new Set([
   "outlook.com", "live.com", "msn.com", "icloud.com", "me.com", "mac.com",
   "aol.com", "comcast.net", "proton.me", "protonmail.com",
 ]);
+
+// Generic business boilerplate — these phrases appear in countless emails and
+// task notes, so they must never count as a meaningful content match.
+const PHRASE_STOPLIST = new Set([
+  "next steps", "let me know", "look forward", "looking forward", "talk soon",
+  "thank you", "thanks again", "follow up", "following up", "touch base",
+  "get back", "reach out", "more information", "any questions",
+]);
+
+/**
+ * Cut off quoted reply history so phrase matching only sees what THIS message
+ * actually says — not boilerplate ("next steps") buried in the thread below.
+ */
+function stripQuoted(body: string): string {
+  const lines = body.split(/\r?\n/);
+  const kept: string[] = [];
+  for (const line of lines) {
+    // Common reply/forward delimiters — everything after is quoted history.
+    if (
+      /^\s*>/.test(line) ||
+      /^\s*On .+ wrote:\s*$/i.test(line) ||
+      /^\s*-{2,}\s*Original Message\s*-{2,}/i.test(line) ||
+      /^\s*(From|Sent|To|Subject):\s/i.test(line) ||
+      /^\s*_{5,}\s*$/.test(line)
+    ) {
+      break;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n");
+}
 
 function tokens(s: string): string[] {
   return (s.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
@@ -108,27 +142,36 @@ function scoreTask(email: EmailFields, task: AsanaTask): Scored {
   const reasons: string[] = [];
   let score = 0;
 
+  // Is this email from us / a teammate rather than an outside customer? If so,
+  // the SENDER describes our side, not the customer — so the sender's name,
+  // email, and (own) domain are useless signals and we lean on the subject and
+  // the recipient ("Hi Gaby") instead.
   const senderEmail = email.senderEmail.toLowerCase();
-  if (senderEmail && hay.includes(senderEmail)) {
+  const senderDomain = senderEmail.split("@")[1] ?? "";
+  const selfDomain = (email.selfEmail ?? "").toLowerCase().split("@")[1] ?? "";
+  const internal = !!senderDomain && senderDomain === selfDomain;
+
+  if (!internal && senderEmail && hay.includes(senderEmail)) {
     score += 3; // exact email = strongest, unambiguous signal
     reasons.push("sender email in task");
   }
 
-  // Verbatim multi-word phrase shared between the subject/body and the task —
-  // e.g. "treetops collective". This is the single most reliable content match,
-  // so it outranks generic single-word overlap by design.
+  // Verbatim multi-word phrase shared between the subject / THIS message's text
+  // and the task — e.g. "treetops collective". The single most reliable content
+  // match. Quoted reply history and generic boilerplate are excluded so threads
+  // can't match on filler like "next steps".
   const subject = stripReply(email.subject);
-  const phraseHay = `${subject}\n${email.body ?? ""}`;
+  const phraseHay = `${subject}\n${stripQuoted(email.body ?? "")}`;
   for (const p of phrases(phraseHay)) {
-    if (hay.includes(p)) {
+    if (!PHRASE_STOPLIST.has(p) && hay.includes(p)) {
       score += 3;
       reasons.push(`phrase "${p}"`);
       break; // one strong phrase is enough; don't stack
     }
   }
 
-  // Organization from the sender's email domain (skips gmail/yahoo/etc).
-  const org = orgRoot(senderEmail);
+  // Organization from the sender's email domain (skips gmail/yahoo + our own).
+  const org = internal ? "" : orgRoot(senderEmail);
   if (org && (hay.includes(org) || compact.includes(org))) {
     score += 2;
     reasons.push(`org domain "${org}"`);
@@ -145,15 +188,16 @@ function scoreTask(email: EmailFields, task: AsanaTask): Scored {
   }
 
   // The customer named in the greeting ("Hi Gaby") appearing in the task.
-  const greet = greetingName(email.body ?? "");
+  const greet = greetingName(stripQuoted(email.body ?? ""));
   if (greet.length >= 3 && hay.includes(greet)) {
     score += 1.5;
     reasons.push(`recipient "${greet}"`);
   }
 
-  // Full sender name (only counts when the whole name appears, not just "Sarah").
+  // Full sender name — only for outside senders (a teammate's name says nothing
+  // about which customer this is), and only when the whole name appears.
   const senderName = email.senderName.toLowerCase().trim();
-  if (senderName.length > 2 && hay.includes(senderName)) {
+  if (!internal && senderName.length > 2 && hay.includes(senderName)) {
     score += 1;
     reasons.push(`sender name`);
   }

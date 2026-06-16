@@ -71,6 +71,8 @@ export default function Inbox() {
   const [labels, setLabels] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  // Set when Gmail rejects a write for missing scopes — prompts re-consent.
+  const [reauth, setReauth] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [noteStatus, setNoteStatus] = useState<string | null>(null);
@@ -169,7 +171,10 @@ export default function Inbox() {
         body: JSON.stringify({ action }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Action failed");
+      if (!res.ok) {
+        if (data.reauth) setReauth(true);
+        throw new Error(data.error ?? "Action failed");
+      }
       setLabels(data.labelIds);
       setActionMsg(
         action === "read"
@@ -196,7 +201,10 @@ export default function Inbox() {
         body: JSON.stringify({ note, subject: detail.message.subject }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to send note");
+      if (!res.ok) {
+        if (data.reauth) setReauth(true);
+        throw new Error(data.error ?? "Failed to send note");
+      }
       setNoteStatus(`Note sent to ${data.sentTo}`);
       setNote("");
     } catch (err) {
@@ -329,6 +337,21 @@ export default function Inbox() {
             </div>
 
             <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5">
+              {reauth && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <p className="font-medium">Google needs to be reconnected</p>
+                  <p className="mt-0.5 text-amber-700">
+                    Your sign-in predates the permission for marking emails read,
+                    flagging, and notes. Reconnect to grant it.
+                  </p>
+                  <a
+                    href="/api/auth/signin?callbackUrl=/"
+                    className="mt-2 inline-block rounded-full bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+                  >
+                    Reconnect Google
+                  </a>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
