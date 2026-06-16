@@ -34,6 +34,15 @@ export const FILTERS: Record<string, FilterDef> = {
       '"for our shop" OR "for our store" OR "for our cafe") ' +
       "newer_than:1y -category:promotions",
   },
+  bill: {
+    label: "Bills",
+    // Bills/invoices you RECEIVE and need to pay (suppliers, utilities, rent,
+    // software). Not Square's incoming-payout emails.
+    query:
+      '(invoice OR "invoice #" OR "amount due" OR "balance due" OR ' +
+      '"payment due" OR "past due" OR "please pay" OR bill OR billing OR ' +
+      "statement) newer_than:1y -category:promotions -category:social",
+  },
   square: {
     label: "Square forms",
     // Square Online contact-form notifications all arrive with this subject:

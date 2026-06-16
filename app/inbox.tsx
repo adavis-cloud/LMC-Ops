@@ -16,6 +16,7 @@ const FILTERS = [
   { key: "catering", label: "Catering" },
   { key: "wholesale", label: "Wholesale" },
   { key: "square", label: "Square forms" },
+  { key: "bill", label: "Bills" },
   { key: "urgent", label: "Urgent" },
 ] as const;
 
