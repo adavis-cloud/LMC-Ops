@@ -40,6 +40,7 @@ export interface GmailFullMessage {
   subject: string;
   date: string;
   body: string;
+  labelIds: string[];
 }
 
 interface Part {
@@ -115,7 +116,71 @@ export async function getMessage(
     subject: header(headers, "Subject"),
     date: header(headers, "Date"),
     body: extractBody(data.payload ?? {}),
+    labelIds: (data.labelIds ?? []) as string[],
   };
+}
+
+/** Add/remove Gmail system labels on a message (e.g. mark read, star). */
+export async function modifyLabels(
+  accessToken: string,
+  id: string,
+  changes: { add?: string[]; remove?: string[] },
+): Promise<string[]> {
+  const res = await fetch(`${GMAIL_BASE}/messages/${id}/modify`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      addLabelIds: changes.add ?? [],
+      removeLabelIds: changes.remove ?? [],
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Gmail modify failed (${res.status}): ${await res.text()}`);
+  }
+  const data = await res.json();
+  return (data.labelIds ?? []) as string[];
+}
+
+/**
+ * Send a plain-text email. The recipient is ALWAYS the signed-in user — the
+ * caller passes `self` and we refuse anything else, so this can never email a
+ * customer. (See the "no accidental sends" guarantee.)
+ */
+export async function sendSelfEmail(
+  accessToken: string,
+  self: string,
+  to: string,
+  subject: string,
+  body: string,
+): Promise<void> {
+  if (to.trim().toLowerCase() !== self.trim().toLowerCase()) {
+    throw new Error("Refusing to send: recipient is not the signed-in user.");
+  }
+
+  const mime = [
+    `To: ${self}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "MIME-Version: 1.0",
+    "",
+    body,
+  ].join("\r\n");
+  const raw = Buffer.from(mime, "utf8").toString("base64url");
+
+  const res = await fetch(`${GMAIL_BASE}/messages/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ raw }),
+  });
+  if (!res.ok) {
+    throw new Error(`Gmail send failed (${res.status}): ${await res.text()}`);
+  }
 }
 
 /**

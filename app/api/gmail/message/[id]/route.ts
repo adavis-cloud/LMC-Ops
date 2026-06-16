@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getMessage } from "@/lib/gmail";
+import { getMessage, modifyLabels } from "@/lib/gmail";
 import {
   getMyTasks,
   getProjectTasksByName,
@@ -86,6 +86,40 @@ export async function GET(
     console.error(err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to load message" },
+      { status: 502 },
+    );
+  }
+}
+
+/** POST { action: "read" | "star" | "unstar" } — modify labels on a message. */
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.accessToken) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const { action } = await req.json().catch(() => ({}));
+
+  const changes: Record<string, { add?: string[]; remove?: string[] }> = {
+    read: { remove: ["UNREAD"] },
+    star: { add: ["STARRED"] },
+    unstar: { remove: ["STARRED"] },
+  };
+  if (!changes[action]) {
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  }
+
+  try {
+    const labelIds = await modifyLabels(session.accessToken, id, changes[action]);
+    return NextResponse.json({ labelIds });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Action failed" },
       { status: 502 },
     );
   }

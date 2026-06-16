@@ -32,6 +32,7 @@ interface MessageDetail {
     subject: string;
     date: string;
     body: string;
+    labelIds: string[];
   };
   asana: AsanaMatch;
 }
@@ -56,6 +57,14 @@ export default function Inbox() {
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  // Per-message actions
+  const [labels, setLabels] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [noteStatus, setNoteStatus] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -100,11 +109,16 @@ export default function Inbox() {
     setDetail(null);
     setDetailError(null);
     setDetailLoading(true);
+    setActionMsg(null);
+    setNoteStatus(null);
+    setNote("");
+    setDraft(null);
     try {
       const res = await fetch(`/api/gmail/message/${id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't open message");
       setDetail(data);
+      setLabels(data.message.labelIds ?? []);
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : "Couldn't open message");
     } finally {
@@ -116,6 +130,67 @@ export default function Inbox() {
     setOpenId(null);
     setDetail(null);
     setDetailError(null);
+  }
+
+  async function act(action: "read" | "star" | "unstar") {
+    if (!openId) return;
+    setBusy(true);
+    setActionMsg(null);
+    try {
+      const res = await fetch(`/api/gmail/message/${openId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Action failed");
+      setLabels(data.labelIds);
+      setActionMsg(
+        action === "read"
+          ? "Marked as read"
+          : action === "star"
+            ? "Flagged"
+            : "Unflagged",
+      );
+    } catch (err) {
+      setActionMsg(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendNote() {
+    if (!detail || !note.trim()) return;
+    setBusy(true);
+    setNoteStatus(null);
+    try {
+      const res = await fetch("/api/gmail/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note, subject: detail.message.subject }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to send note");
+      setNoteStatus(`Note sent to ${data.sentTo}`);
+      setNote("");
+    } catch (err) {
+      setNoteStatus(err instanceof Error ? err.message : "Failed to send note");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function makeDraft() {
+    if (!detail) return;
+    const who = cleanFrom(detail.message.from);
+    const first = (who.includes("@") ? who.split("@")[0] : who.split(" ")[0]) || "there";
+    const quoted = detail.message.body
+      .split("\n")
+      .map((l) => "> " + l)
+      .join("\n");
+    setDraft(
+      `Hi ${first},\n\nThanks for reaching out!\n\n\n\nBest,\nLast Mile Cafe\n\n----- Original message -----\n${quoted}`,
+    );
   }
 
   // ---- Detail view ----
@@ -156,6 +231,87 @@ export default function Inbox() {
               <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink/80">
                 {detail.message.body || "(no message body)"}
               </pre>
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => act("read")}
+                  disabled={busy || !labels.includes("UNREAD")}
+                  className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream disabled:opacity-50"
+                >
+                  {labels.includes("UNREAD") ? "Mark as read" : "Read ✓"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => act(labels.includes("STARRED") ? "unstar" : "star")}
+                  disabled={busy}
+                  className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream disabled:opacity-50"
+                >
+                  {labels.includes("STARRED") ? "★ Flagged" : "☆ Flag"}
+                </button>
+                <button
+                  type="button"
+                  onClick={makeDraft}
+                  disabled={busy}
+                  className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream disabled:opacity-50"
+                >
+                  Draft reply
+                </button>
+              </div>
+              {actionMsg && <p className="text-xs text-muted">{actionMsg}</p>}
+
+              {draft !== null && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    Draft reply — review &amp; copy (nothing is sent)
+                  </span>
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={8}
+                    className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(draft);
+                      setActionMsg("Draft copied — paste into Gmail to send.");
+                    }}
+                    className="w-fit rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 border-t border-line pt-4">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Note to self
+                </span>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={3}
+                  placeholder="Jot a note about this inquiry…"
+                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={sendNote}
+                    disabled={busy || !note.trim()}
+                    className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-cream transition hover:bg-brand-hover disabled:opacity-50"
+                  >
+                    Email note to myself
+                  </button>
+                  <span className="text-xs text-muted">
+                    Sends only to your address — never the customer.
+                  </span>
+                </div>
+                {noteStatus && <p className="text-xs text-muted">{noteStatus}</p>}
+              </div>
             </div>
           </>
         )}

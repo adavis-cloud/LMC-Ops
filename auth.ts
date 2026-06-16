@@ -4,7 +4,8 @@ import Google from "next-auth/providers/google";
 /**
  * Scopes we request from Google.
  * - openid / email / profile: basic sign-in identity
- * - gmail.readonly: read-only access to the inbox (search catering/wholesale inquiries)
+ * - gmail.modify: read inbox + modify labels (mark read, star) and send mail.
+ *   (We only ever send to the signed-in user — see lib/gmail.ts sendSelfEmail.)
  *
  * Keep this list minimal. Adding scopes later requires re-consent.
  */
@@ -12,7 +13,7 @@ const GOOGLE_SCOPES = [
   "openid",
   "email",
   "profile",
-  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.modify",
 ].join(" ");
 
 /** Comma-separated exact-email allow-list, e.g. "you@gmail.com,sarah@..." */
