@@ -45,7 +45,7 @@ At **api.slack.com/apps → Create New App → From scratch**, pick your workspa
   | Name | Callback ID |
   | --- | --- |
   | Create Asana task | `create_asana_task` |
-  | Add comment to Asana task | `comment_asana_task` |
+  | Comment on Asana task | `comment_asana_task` |
 
 **Slash Commands** (optional) → Create `/task`
 - Request URL: `https://YOUR-DOMAIN/api/slack/commands`

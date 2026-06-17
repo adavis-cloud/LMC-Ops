@@ -90,6 +90,14 @@ export default async function Home() {
             >
               Slack ↗
             </a>
+            <a
+              href="/learned"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-cream"
+            >
+              Learned ↗
+            </a>
             <form
               action={async () => {
                 "use server";

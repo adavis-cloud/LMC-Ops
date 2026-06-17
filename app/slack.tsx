@@ -155,7 +155,7 @@ function HowTo() {
           Create Asana task</span>. Confirm the name, assignee, and due date.
         </li>
         <li>
-          Use <span className="font-medium text-ink">⋯ → Add comment to Asana task</span> to
+          Use <span className="font-medium text-ink">⋯ → Comment on Asana task</span> to
           log a note on an existing task.
         </li>
         <li>

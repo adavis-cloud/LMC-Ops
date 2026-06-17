@@ -59,6 +59,33 @@ export async function kvLogPush(key: string, value: unknown, cap = 50): Promise<
   await command(["LTRIM", key, 0, cap - 1]);
 }
 
+/** All keys matching a glob pattern (walks the SCAN cursor to completion). */
+export async function kvScanKeys(match: string, count = 200): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor = "0";
+  do {
+    const [next, batch] = await command<[string, string[]]>([
+      "SCAN", cursor, "MATCH", match, "COUNT", count,
+    ]);
+    if (batch?.length) keys.push(...batch);
+    cursor = next;
+  } while (cursor !== "0");
+  return keys;
+}
+
+/** Set one field of a hash. */
+export async function kvHSet(key: string, field: string, value: string): Promise<void> {
+  await command(["HSET", key, field, value]);
+}
+
+/** Read a whole hash as an object (Upstash returns a flat [field, value, …]). */
+export async function kvHGetAll(key: string): Promise<Record<string, string>> {
+  const flat = (await command<string[]>(["HGETALL", key])) ?? [];
+  const out: Record<string, string> = {};
+  for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = flat[i + 1];
+  return out;
+}
+
 /** Read a list (newest first), parsing each JSON entry. */
 export async function kvLogList<T>(key: string, count = 50): Promise<T[]> {
   const raw = await command<string[]>(["LRANGE", key, 0, count - 1]);

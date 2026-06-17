@@ -270,6 +270,7 @@ export default function Inbox() {
         body: JSON.stringify({
           keys: m.learnKeys,
           taskGid: m.match.gid,
+          taskName: m.match.name,
           section: m.match.section,
           verdict,
         }),

@@ -13,12 +13,25 @@
  * rejection can't taint all internal mail.
  */
 
-import { kvConfigured, kvGetJSON, kvSetJSON } from "./kv";
+import {
+  kvConfigured,
+  kvDel,
+  kvGetJSON,
+  kvHGetAll,
+  kvHSet,
+  kvScanKeys,
+  kvSetJSON,
+} from "./kv";
 import { isFreeEmailDomain, orgPhraseKeys } from "./match";
 import type { MatchMemory } from "./match";
 
 const rejectKey = (key: string) => `learn:reject:${key}`;
 const confirmKey = (key: string) => `learn:confirm:${key}`;
+/** gid → task name, so the "what I've learned" view can show readable names. */
+const NAMES_KEY = "learn:names";
+
+const REJECT_PREFIX = "learn:reject:";
+const CONFIRM_PREFIX = "learn:confirm:";
 
 interface ConfirmRecord {
   gids: string[];
@@ -98,8 +111,13 @@ export async function loadMatchMemory(
 }
 
 /** Remember that `taskGid` is NOT the right task — across all given keys. */
-export async function recordReject(keys: string[], taskGid: string): Promise<void> {
+export async function recordReject(
+  keys: string[],
+  taskGid: string,
+  taskName?: string,
+): Promise<void> {
   if (!kvConfigured() || !keys.length) return;
+  if (taskName) await kvHSet(NAMES_KEY, taskGid, taskName);
   await Promise.all(
     keys.map(async (key) => {
       const k = rejectKey(key);
@@ -115,9 +133,11 @@ export async function recordConfirm(
   keys: string[],
   taskGid: string,
   section?: string,
+  taskName?: string,
   now = Date.now(),
 ): Promise<void> {
   if (!kvConfigured() || !keys.length) return;
+  if (taskName) await kvHSet(NAMES_KEY, taskGid, taskName);
   await Promise.all(
     keys.map(async (key) => {
       const ck = confirmKey(key);
@@ -136,4 +156,89 @@ export async function recordConfirm(
       }
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// "What I've learned" view — list and undo stored corrections.
+// ---------------------------------------------------------------------------
+
+export type LearnScope = "email" | "domain" | "org name";
+
+export interface LearnedEntry {
+  /** The inner key, e.g. "domain:treetopscollective.org". */
+  key: string;
+  scope: LearnScope;
+  /** Human-readable subject, e.g. "treetopscollective.org". */
+  label: string;
+  verdict: "confirm" | "reject";
+  tasks: { gid: string; name: string }[];
+  section?: string;
+}
+
+function describe(innerKey: string): { scope: LearnScope; label: string } {
+  if (innerKey.startsWith("email:")) return { scope: "email", label: innerKey.slice(6) };
+  if (innerKey.startsWith("domain:")) return { scope: "domain", label: innerKey.slice(7) };
+  if (innerKey.startsWith("phrase:")) return { scope: "org name", label: innerKey.slice(7) };
+  return { scope: "org name", label: innerKey };
+}
+
+/** Every stored correction, with task names resolved, for the learnings page. */
+export async function listLearnings(): Promise<LearnedEntry[]> {
+  if (!kvConfigured()) return [];
+  const [rejKeys, confKeys, names] = await Promise.all([
+    kvScanKeys(`${REJECT_PREFIX}*`),
+    kvScanKeys(`${CONFIRM_PREFIX}*`),
+    kvHGetAll(NAMES_KEY),
+  ]);
+  const taskOf = (gid: string) => ({ gid, name: names[gid] ?? gid });
+  const out: LearnedEntry[] = [];
+
+  for (const k of rejKeys) {
+    const inner = k.slice(REJECT_PREFIX.length);
+    const gids = (await kvGetJSON<string[]>(k)) ?? [];
+    if (gids.length) {
+      out.push({ key: inner, ...describe(inner), verdict: "reject", tasks: gids.map(taskOf) });
+    }
+  }
+  for (const k of confKeys) {
+    const inner = k.slice(CONFIRM_PREFIX.length);
+    const rec = await kvGetJSON<ConfirmRecord>(k);
+    if (rec?.gids?.length) {
+      out.push({
+        key: inner,
+        ...describe(inner),
+        verdict: "confirm",
+        tasks: rec.gids.map(taskOf),
+        section: rec.section,
+      });
+    }
+  }
+  // Most specific first, confirmations before rejections.
+  const rank = { email: 0, domain: 1, "org name": 2 } as const;
+  return out.sort(
+    (a, b) => rank[a.scope] - rank[b.scope] || a.verdict.localeCompare(b.verdict),
+  );
+}
+
+/** Undo a correction: drop one task from a key, or the whole key when no gid. */
+export async function forget(
+  innerKey: string,
+  verdict: "confirm" | "reject",
+  gid?: string,
+): Promise<void> {
+  if (!kvConfigured()) return;
+  if (verdict === "reject") {
+    const k = rejectKey(innerKey);
+    if (!gid) return void kvDel(k);
+    const cur = (await kvGetJSON<string[]>(k)) ?? [];
+    const next = cur.filter((g) => g !== gid);
+    await (next.length ? kvSetJSON(k, next) : kvDel(k));
+  } else {
+    const k = confirmKey(innerKey);
+    if (!gid) return void kvDel(k);
+    const rec = await kvGetJSON<ConfirmRecord>(k);
+    if (!rec) return;
+    rec.gids = rec.gids.filter((g) => g !== gid);
+    await (rec.gids.length ? kvSetJSON(k, rec) : kvDel(k));
+  }
 }

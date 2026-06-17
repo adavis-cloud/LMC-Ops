@@ -14,7 +14,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const { keys, taskGid, section, verdict } = await req.json().catch(() => ({}));
+  const { keys, taskGid, taskName, section, verdict } = await req
+    .json()
+    .catch(() => ({}));
 
   if (
     !Array.isArray(keys) ||
@@ -31,10 +33,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const name = typeof taskName === "string" ? taskName : undefined;
+    const sect = typeof section === "string" ? section : undefined;
     if (verdict === "reject") {
-      await recordReject(keys, taskGid);
+      await recordReject(keys, taskGid, name);
     } else {
-      await recordConfirm(keys, taskGid, typeof section === "string" ? section : undefined);
+      await recordConfirm(keys, taskGid, sect, name);
     }
     // `learned` tells the UI whether the correction actually persisted.
     return NextResponse.json({ ok: true, learned: kvConfigured() });
