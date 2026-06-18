@@ -12,6 +12,8 @@ import { matchTasks, EmailFields } from "@/lib/match";
 import { learningKeysFor, loadMatchMemory } from "@/lib/match-memory";
 import { buildTaskDraft } from "@/lib/draft";
 import { parseInquiry } from "@/lib/parse";
+import { findInvoicesForEmail } from "@/lib/square";
+import { getValidSquareToken } from "@/lib/square-session";
 
 export async function GET(
   req: NextRequest,
@@ -83,7 +85,25 @@ export async function GET(
 
     const draftTask = buildTaskDraft(parsed);
 
-    return NextResponse.json({ message, asana, draftTask });
+    // Cross-check Square for an existing invoice for this same customer — uses
+    // the same parsed email that drives the Asana match, so they stay in sync.
+    let square;
+    const squareToken = await getValidSquareToken();
+    if (!squareToken) {
+      square = { connected: false as const };
+    } else {
+      try {
+        const invoices = parsed.email
+          ? await findInvoicesForEmail(squareToken, parsed.email)
+          : [];
+        square = { connected: true as const, customerEmail: parsed.email, invoices };
+      } catch (err) {
+        console.error("Square invoice lookup failed", err);
+        square = { connected: true as const, customerEmail: parsed.email, invoices: [], error: true };
+      }
+    }
+
+    return NextResponse.json({ message, asana, draftTask, square });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

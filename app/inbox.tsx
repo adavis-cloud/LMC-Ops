@@ -54,6 +54,21 @@ interface MessageDetail {
   };
   asana: AsanaMatch;
   draftTask: TaskDraft;
+  square?: SquareInfo;
+}
+
+interface InvoiceSummary {
+  id: string;
+  number?: string;
+  status: string;
+  amount?: string;
+  url: string;
+}
+interface SquareInfo {
+  connected: boolean;
+  customerEmail?: string;
+  invoices?: InvoiceSummary[];
+  error?: boolean;
 }
 
 const FILTERS = [
@@ -103,6 +118,10 @@ export default function Inbox() {
   const [commentMsg, setCommentMsg] = useState<string | null>(null);
   // Match-correction feedback ("Correct" / "Not the right task").
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  // Square draft-invoice action.
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceMsg, setInvoiceMsg] = useState<string | null>(null);
+  const [draftInvoiceUrl, setDraftInvoiceUrl] = useState<string | null>(null);
 
   async function load(url: string) {
     setLoading(true);
@@ -173,6 +192,8 @@ export default function Inbox() {
     setCreateMsg(null);
     setCommentMsg(null);
     setFeedbackMsg(null);
+    setInvoiceMsg(null);
+    setDraftInvoiceUrl(null);
     try {
       const res = await fetch(`/api/gmail/message/${id}`);
       const data = await res.json();
@@ -257,6 +278,33 @@ export default function Inbox() {
     setDraft(
       `Hi ${first},\n\nThanks for reaching out!\n\n\n\nBest,\nLast Mile Cafe\n\n----- Original message -----\n${quoted}`,
     );
+  }
+
+  /** Create a DRAFT invoice in Square for this customer (finalize + send there). */
+  async function createDraftInvoice() {
+    const sq = detail?.square;
+    if (!sq?.customerEmail) return;
+    setInvoiceBusy(true);
+    setInvoiceMsg(null);
+    try {
+      const res = await fetch("/api/square/draft-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: sq.customerEmail,
+          name: cleanFrom(detail!.message.from),
+          title: detail!.message.subject,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to create draft invoice");
+      setDraftInvoiceUrl(data.dashboardUrl);
+      setInvoiceMsg("Draft created in Square — open it to add amounts and send.");
+    } catch (err) {
+      setInvoiceMsg(err instanceof Error ? err.message : "Failed to create draft invoice");
+    } finally {
+      setInvoiceBusy(false);
+    }
   }
 
   /** Send a correction so matching improves for this customer / org next time. */
@@ -423,6 +471,14 @@ export default function Inbox() {
                 {feedbackMsg && <span className="text-xs text-muted">{feedbackMsg}</span>}
               </div>
             )}
+
+            <SquareBlock
+              square={detail.square}
+              busy={invoiceBusy}
+              msg={invoiceMsg}
+              draftUrl={draftInvoiceUrl}
+              onCreateDraft={createDraftInvoice}
+            />
 
             <div className="rounded-xl border border-line bg-surface p-5">
               <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink/80">
@@ -833,6 +889,98 @@ export default function Inbox() {
         </div>
       )}
     </section>
+  );
+}
+
+/** Square invoice panel — existing invoices for the customer, or prepare a draft. */
+function SquareBlock({
+  square,
+  busy,
+  msg,
+  draftUrl,
+  onCreateDraft,
+}: {
+  square?: SquareInfo;
+  busy: boolean;
+  msg: string | null;
+  draftUrl: string | null;
+  onCreateDraft: () => void;
+}) {
+  // Hidden entirely until Square is wired up, to avoid clutter.
+  if (!square) return null;
+
+  if (!square.connected) {
+    return (
+      <div className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-muted">
+        <a href="/api/square/connect" className="font-medium text-brand hover:underline">
+          Connect Square
+        </a>{" "}
+        to check for an existing invoice and prepare new ones.
+      </div>
+    );
+  }
+
+  const invoices = square.invoices ?? [];
+  const canDraft = !!square.customerEmail;
+
+  return (
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+        Square invoices
+      </p>
+
+      {square.error ? (
+        <p className="mt-1 text-sm text-muted">Couldn’t reach Square just now.</p>
+      ) : invoices.length > 0 ? (
+        <ul className="mt-1 flex flex-col gap-1">
+          {invoices.map((inv) => (
+            <li key={inv.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <a
+                href={inv.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-ink hover:underline"
+              >
+                {inv.number ? `Invoice ${inv.number}` : "Invoice"}
+              </a>
+              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-brand">
+                {inv.status.replace(/_/g, " ").toLowerCase()}
+              </span>
+              {inv.amount && <span className="text-xs text-muted">{inv.amount}</span>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-muted">
+          No invoice found for{" "}
+          <span className="text-ink">{square.customerEmail || "this customer"}</span>.
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {draftUrl ? (
+          <a
+            href={draftUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-cream transition hover:bg-brand-hover"
+          >
+            Open draft in Square ↗
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={onCreateDraft}
+            disabled={busy || !canDraft}
+            className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-cream disabled:opacity-50"
+            title={canDraft ? undefined : "Need a customer email to create an invoice"}
+          >
+            {busy ? "Creating…" : "Prepare draft invoice in Square"}
+          </button>
+        )}
+        {msg && <span className="text-xs text-muted">{msg}</span>}
+      </div>
+    </div>
   );
 }
 
